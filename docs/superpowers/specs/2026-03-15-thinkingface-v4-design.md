@@ -98,7 +98,7 @@ Each worker needs a starting block at the correct horizontal offset. The UI show
 > "Place your start block **N columns** to the right of Worker 1's block"
 > (N = `(workerNum - 1) * sliceW`)
 
-Worker 1's starting block position is the anchor. All other workers count from there.
+Worker 1's starting block position is the anchor. All other workers count from there. Coordination is manual — players use chat/Discord to agree on the anchor block position before starting.
 
 ### 3.4 UI
 
@@ -161,7 +161,7 @@ Result: only edges/outlines are built. Produces a sketch/line-art aesthetic. Com
 | Saturation | -100 to +100 | 0 | Add/subtract to S in HSV |
 | Hue Shift | 0 to 360 | 0 | Add to H in HSV (wraps) |
 
-**Implementation:** Convert Color3 → HSV, apply adjustments, clamp, convert back to RGB. Applied inside `getColor()` after sampling but before returning. Zero values on all sliders = no change, no performance cost (early return).
+**Implementation:** Convert Color3 → HSV, apply adjustments, clamp, convert back to RGB. Applied inside `getColor()` after sampling but before returning. If all four sliders are at their default (0 / 0 / 0 / 0), skip the HSV conversion entirely and return the sampled color unchanged — no performance cost.
 
 ---
 
@@ -184,7 +184,7 @@ Setup:
   1. Download + parse image
   2. Apply scale resize if needed
   3. If detail mode == "Dithering": pre-compute ditherMap
-  4. If edge mode enabled: pre-compute edgeMap
+  4. If edge mode enabled: pre-compute edgeMap (stores raw gradient magnitude 0–1 per canvas cell; threshold comparison happens at build time)
   5. Compute canvas dimensions (accounting for co-op slice)
   6. Compute totalBlocks for progress tracking
 
