@@ -66,10 +66,12 @@ do
 end
 
 ----------------------------------------------------------------------
--- Unfilter
+-- Unfilter (with table.create optimization for Roblox)
 ----------------------------------------------------------------------
 do
     local Unfilter = {}
+
+    local tableCreate = table.create or function(n) return {} end
 
     local function bytesToString(bytes, len)
         local CHUNK = 2048
@@ -87,7 +89,7 @@ do
 
     function Unfilter.Sub(Data, PrevLine, BPP)
         local len = #Data
-        local bytes = {}
+        local bytes = tableCreate(len)
         for I = 1, len do
             local raw = string.byte(Data, I)
             local left = I > BPP and bytes[I - BPP] or 0
@@ -98,7 +100,7 @@ do
 
     function Unfilter.Up(Data, PrevLine)
         local len = #Data
-        local bytes = {}
+        local bytes = tableCreate(len)
         for I = 1, len do
             local raw = string.byte(Data, I)
             local above = PrevLine and string.byte(PrevLine, I) or 0
@@ -109,7 +111,7 @@ do
 
     function Unfilter.Average(Data, PrevLine, BPP)
         local len = #Data
-        local bytes = {}
+        local bytes = tableCreate(len)
         for I = 1, len do
             local raw = string.byte(Data, I)
             local left = I > BPP and bytes[I - BPP] or 0
@@ -121,7 +123,7 @@ do
 
     function Unfilter.Paeth(Data, PrevLine, BPP)
         local len = #Data
-        local bytes = {}
+        local bytes = tableCreate(len)
         for I = 1, len do
             local raw = string.byte(Data, I)
             local a = I > BPP and bytes[I - BPP] or 0
@@ -470,15 +472,10 @@ do
         local offset = (x - 1) * bpp + 1
 
         if bpp == 3 then
-            local r = string.byte(row, offset)
-            local g = string.byte(row, offset + 1)
-            local b = string.byte(row, offset + 2)
+            local r, g, b = string.byte(row, offset, offset + 2)
             return Color3.new(r / 255, g / 255, b / 255), 255
         else -- bpp == 4
-            local r = string.byte(row, offset)
-            local g = string.byte(row, offset + 1)
-            local b = string.byte(row, offset + 2)
-            local a = string.byte(row, offset + 3)
+            local r, g, b, a = string.byte(row, offset, offset + 3)
             return Color3.new(r / 255, g / 255, b / 255), a
         end
     end
@@ -745,6 +742,448 @@ end
 do
     function PNG.GetBrightness(color)
         return 0.299 * color.R + 0.587 * color.G + 0.114 * color.B
+    end
+end
+
+----------------------------------------------------------------------
+-- Dither Module
+----------------------------------------------------------------------
+do
+    local Dither = {}
+
+    function Dither.FloydSteinberg(file, canvasW, canvasH, pixelSize, sampleFunc)
+        -- Pre-compute a Floyd-Steinberg dithered color grid.
+        -- Returns grid[cy][cx] = Color3
+        -- sampleFunc signature: sampleFunc(file, cx, cy, pixelSize) -> Color3, alpha
+
+        -- First, sample all colors into floating-point RGB arrays
+        local rGrid = {}
+        local gGrid = {}
+        local bGrid = {}
+
+        for cy = 1, canvasH do
+            rGrid[cy] = {}
+            gGrid[cy] = {}
+            bGrid[cy] = {}
+            for cx = 1, canvasW do
+                local color, alpha = sampleFunc(file, cx, cy, pixelSize)
+                rGrid[cy][cx] = color.R
+                gGrid[cy][cx] = color.G
+                bGrid[cy][cx] = color.B
+            end
+        end
+
+        -- Quantize to nearest palette value (simple round to 0 or 1 per channel,
+        -- or more generally snap to nearest 1/255 step) and diffuse error
+        local grid = {}
+        for cy = 1, canvasH do
+            grid[cy] = {}
+            for cx = 1, canvasW do
+                local oldR = rGrid[cy][cx]
+                local oldG = gGrid[cy][cx]
+                local oldB = bGrid[cy][cx]
+
+                -- Quantize: snap to nearest value in [0, 1] representable by 8-bit
+                local newR = math.floor(oldR * 255 + 0.5) / 255
+                local newG = math.floor(oldG * 255 + 0.5) / 255
+                local newB = math.floor(oldB * 255 + 0.5) / 255
+
+                newR = math.clamp(newR, 0, 1)
+                newG = math.clamp(newG, 0, 1)
+                newB = math.clamp(newB, 0, 1)
+
+                grid[cy][cx] = Color3.new(newR, newG, newB)
+
+                local errR = oldR - newR
+                local errG = oldG - newG
+                local errB = oldB - newB
+
+                -- Distribute error to neighbors: right, bottom-left, bottom, bottom-right
+                -- Weights: 7/16, 3/16, 5/16, 1/16
+                if cx + 1 <= canvasW then
+                    rGrid[cy][cx + 1] = rGrid[cy][cx + 1] + errR * (7 / 16)
+                    gGrid[cy][cx + 1] = gGrid[cy][cx + 1] + errG * (7 / 16)
+                    bGrid[cy][cx + 1] = bGrid[cy][cx + 1] + errB * (7 / 16)
+                end
+                if cy + 1 <= canvasH then
+                    if cx - 1 >= 1 then
+                        rGrid[cy + 1][cx - 1] = rGrid[cy + 1][cx - 1] + errR * (3 / 16)
+                        gGrid[cy + 1][cx - 1] = gGrid[cy + 1][cx - 1] + errG * (3 / 16)
+                        bGrid[cy + 1][cx - 1] = bGrid[cy + 1][cx - 1] + errB * (3 / 16)
+                    end
+                    rGrid[cy + 1][cx] = rGrid[cy + 1][cx] + errR * (5 / 16)
+                    gGrid[cy + 1][cx] = gGrid[cy + 1][cx] + errG * (5 / 16)
+                    bGrid[cy + 1][cx] = bGrid[cy + 1][cx] + errB * (5 / 16)
+                    if cx + 1 <= canvasW then
+                        rGrid[cy + 1][cx + 1] = rGrid[cy + 1][cx + 1] + errR * (1 / 16)
+                        gGrid[cy + 1][cx + 1] = gGrid[cy + 1][cx + 1] + errG * (1 / 16)
+                        bGrid[cy + 1][cx + 1] = bGrid[cy + 1][cx + 1] + errB * (1 / 16)
+                    end
+                end
+            end
+        end
+
+        return grid
+    end
+
+    -- Pre-computed Bayer matrices
+    local bayerMatrices = {}
+
+    bayerMatrices[2] = {
+        {0, 2},
+        {3, 1},
+    }
+
+    bayerMatrices[4] = {
+        { 0,  8,  2, 10},
+        {12,  4, 14,  6},
+        { 3, 11,  1,  9},
+        {15,  7, 13,  5},
+    }
+
+    bayerMatrices[8] = {
+        { 0, 32,  8, 40,  2, 34, 10, 42},
+        {48, 16, 56, 24, 50, 18, 58, 26},
+        {12, 44,  4, 36, 14, 46,  6, 38},
+        {60, 28, 52, 20, 62, 30, 54, 22},
+        { 3, 35, 11, 43,  1, 33,  9, 41},
+        {51, 19, 59, 27, 49, 17, 57, 25},
+        {15, 47,  7, 39, 13, 45,  5, 37},
+        {63, 31, 55, 23, 61, 29, 53, 21},
+    }
+
+    function Dither.Ordered(color, x, y, matrixSize)
+        local matrix = bayerMatrices[matrixSize]
+        if not matrix then
+            error("Ordered dither matrixSize must be 2, 4, or 8, got: " .. tostring(matrixSize))
+        end
+
+        local n = matrixSize
+        local n2 = n * n
+        -- Map x, y to matrix indices (0-based, wrapping)
+        local mx = (x - 1) % n + 1
+        local my = (y - 1) % n + 1
+        local threshold = (matrix[my][mx] + 0.5) / n2 - 0.5 -- range [-0.5, 0.5)
+
+        local spread = 1 / 255 -- one quantization step for 8-bit
+        local r = math.clamp(math.floor((color.R + threshold * spread) * 255 + 0.5) / 255, 0, 1)
+        local g = math.clamp(math.floor((color.G + threshold * spread) * 255 + 0.5) / 255, 0, 1)
+        local b = math.clamp(math.floor((color.B + threshold * spread) * 255 + 0.5) / 255, 0, 1)
+
+        return Color3.new(r, g, b)
+    end
+
+    PNG.Dither = Dither
+end
+
+----------------------------------------------------------------------
+-- Edge Detection Module
+----------------------------------------------------------------------
+do
+    local EdgeDetect = {}
+
+    -- Sobel kernels
+    local sobelX = {
+        {-1, 0, 1},
+        {-2, 0, 2},
+        {-1, 0, 1},
+    }
+
+    local sobelY = {
+        {-1, -2, -1},
+        { 0,  0,  0},
+        { 1,  2,  1},
+    }
+
+    function EdgeDetect.Sobel(file, x, y)
+        -- Applies Sobel edge detection at pixel (x, y).
+        -- Returns magnitude in range [0, 1].
+        local gx = 0
+        local gy = 0
+
+        for ky = -1, 1 do
+            for kx = -1, 1 do
+                local px = math.clamp(x + kx, 1, file.Width)
+                local py = math.clamp(y + ky, 1, file.Height)
+                local color = file:GetPixel(px, py)
+                local brightness = 0.299 * color.R + 0.587 * color.G + 0.114 * color.B
+
+                local ki = ky + 2 -- 1-based index
+                local kj = kx + 2
+                gx = gx + brightness * sobelX[ki][kj]
+                gy = gy + brightness * sobelY[ki][kj]
+            end
+        end
+
+        local magnitude = math.sqrt(gx * gx + gy * gy)
+        -- Normalize: theoretical max for Sobel on [0,1] brightness is ~4.0
+        -- Clamp to [0, 1]
+        return math.clamp(magnitude, 0, 1)
+    end
+
+    PNG.EdgeDetect = EdgeDetect
+end
+
+----------------------------------------------------------------------
+-- Color Effect Module
+----------------------------------------------------------------------
+do
+    local ColorEffect = {}
+
+    function ColorEffect.Grayscale(color)
+        local gray = 0.299 * color.R + 0.587 * color.G + 0.114 * color.B
+        return Color3.new(gray, gray, gray)
+    end
+
+    function ColorEffect.Sepia(color)
+        local r = color.R
+        local g = color.G
+        local b = color.B
+
+        local newR = math.clamp(r * 0.393 + g * 0.769 + b * 0.189, 0, 1)
+        local newG = math.clamp(r * 0.349 + g * 0.686 + b * 0.168, 0, 1)
+        local newB = math.clamp(r * 0.272 + g * 0.534 + b * 0.131, 0, 1)
+
+        return Color3.new(newR, newG, newB)
+    end
+
+    function ColorEffect.Invert(color)
+        return Color3.new(1 - color.R, 1 - color.G, 1 - color.B)
+    end
+
+    function ColorEffect.Posterize(color, levels)
+        levels = math.clamp(levels or 4, 2, 16)
+        local divisor = levels - 1
+
+        local r = math.floor(color.R * divisor + 0.5) / divisor
+        local g = math.floor(color.G * divisor + 0.5) / divisor
+        local b = math.floor(color.B * divisor + 0.5) / divisor
+
+        return Color3.new(
+            math.clamp(r, 0, 1),
+            math.clamp(g, 0, 1),
+            math.clamp(b, 0, 1)
+        )
+    end
+
+    function ColorEffect.Contrast(color, amount)
+        -- amount: 0-2 where 1 is no change
+        amount = amount or 1
+        local r = math.clamp((color.R - 0.5) * amount + 0.5, 0, 1)
+        local g = math.clamp((color.G - 0.5) * amount + 0.5, 0, 1)
+        local b = math.clamp((color.B - 0.5) * amount + 0.5, 0, 1)
+        return Color3.new(r, g, b)
+    end
+
+    function ColorEffect.Saturate(color, amount)
+        -- amount: 0-2 where 1 is no change, 0 is grayscale, 2 is double saturation
+        amount = amount or 1
+        local gray = 0.299 * color.R + 0.587 * color.G + 0.114 * color.B
+        local r = math.clamp(gray + (color.R - gray) * amount, 0, 1)
+        local g = math.clamp(gray + (color.G - gray) * amount, 0, 1)
+        local b = math.clamp(gray + (color.B - gray) * amount, 0, 1)
+        return Color3.new(r, g, b)
+    end
+
+    function ColorEffect.Neon(color)
+        -- Boost saturation and brightness for a neon glow effect
+        local gray = 0.299 * color.R + 0.587 * color.G + 0.114 * color.B
+
+        -- Boost saturation by 2x
+        local r = gray + (color.R - gray) * 2
+        local g = gray + (color.G - gray) * 2
+        local b = gray + (color.B - gray) * 2
+
+        -- Boost brightness by 1.5x
+        r = r * 1.5
+        g = g * 1.5
+        b = b * 1.5
+
+        return Color3.new(
+            math.clamp(r, 0, 1),
+            math.clamp(g, 0, 1),
+            math.clamp(b, 0, 1)
+        )
+    end
+
+    function ColorEffect.Apply(color, effectName, params)
+        params = params or {}
+        local name = string.lower(effectName)
+
+        if name == "grayscale" then
+            return ColorEffect.Grayscale(color)
+        elseif name == "sepia" then
+            return ColorEffect.Sepia(color)
+        elseif name == "invert" then
+            return ColorEffect.Invert(color)
+        elseif name == "posterize" then
+            return ColorEffect.Posterize(color, params.levels or params[1])
+        elseif name == "contrast" then
+            return ColorEffect.Contrast(color, params.amount or params[1])
+        elseif name == "saturate" or name == "saturation" then
+            return ColorEffect.Saturate(color, params.amount or params[1])
+        elseif name == "neon" then
+            return ColorEffect.Neon(color)
+        else
+            error("Unknown color effect: " .. tostring(effectName))
+        end
+    end
+
+    PNG.ColorEffect = ColorEffect
+end
+
+----------------------------------------------------------------------
+-- Gradient Map Module
+----------------------------------------------------------------------
+do
+    local GradientMap = {}
+
+    -- Each gradient is an array of {position, Color3} stops sorted by position (0 to 1)
+    local gradients = {}
+
+    gradients["sunset"] = {
+        {0.0,  Color3.new(0.2, 0.0, 0.3)},   -- dark purple
+        {0.4,  Color3.new(0.9, 0.3, 0.1)},   -- orange
+        {1.0,  Color3.new(1.0, 0.9, 0.2)},   -- yellow
+    }
+
+    gradients["ocean"] = {
+        {0.0,  Color3.new(0.0, 0.1, 0.4)},   -- deep blue
+        {0.5,  Color3.new(0.0, 0.7, 0.8)},   -- cyan
+        {1.0,  Color3.new(1.0, 1.0, 1.0)},   -- white
+    }
+
+    gradients["forest"] = {
+        {0.0,  Color3.new(0.0, 0.2, 0.0)},   -- dark green
+        {0.5,  Color3.new(0.3, 0.8, 0.1)},   -- lime
+        {1.0,  Color3.new(0.9, 0.9, 0.2)},   -- yellow
+    }
+
+    gradients["infrared"] = {
+        {0.0,  Color3.new(0.0, 0.0, 0.0)},   -- black
+        {0.2,  Color3.new(0.4, 0.0, 0.5)},   -- purple
+        {0.4,  Color3.new(0.8, 0.0, 0.1)},   -- red
+        {0.6,  Color3.new(1.0, 0.5, 0.0)},   -- orange
+        {0.8,  Color3.new(1.0, 0.9, 0.0)},   -- yellow
+        {1.0,  Color3.new(1.0, 1.0, 1.0)},   -- white
+    }
+
+    gradients["rainbow"] = {
+        {0.0,      Color3.new(1.0, 0.0, 0.0)},   -- red
+        {1 / 6,    Color3.new(1.0, 1.0, 0.0)},   -- yellow
+        {2 / 6,    Color3.new(0.0, 1.0, 0.0)},   -- green
+        {3 / 6,    Color3.new(0.0, 1.0, 1.0)},   -- cyan
+        {4 / 6,    Color3.new(0.0, 0.0, 1.0)},   -- blue
+        {5 / 6,    Color3.new(1.0, 0.0, 1.0)},   -- magenta
+        {1.0,      Color3.new(1.0, 0.0, 0.0)},   -- red (wrap)
+    }
+
+    gradients["fire"] = {
+        {0.0,  Color3.new(0.0, 0.0, 0.0)},   -- black
+        {0.25, Color3.new(0.5, 0.0, 0.0)},   -- dark red
+        {0.5,  Color3.new(1.0, 0.3, 0.0)},   -- orange
+        {0.75, Color3.new(1.0, 0.7, 0.0)},   -- yellow-orange
+        {1.0,  Color3.new(1.0, 1.0, 0.8)},   -- bright yellow-white
+    }
+
+    gradients["ice"] = {
+        {0.0,  Color3.new(0.05, 0.05, 0.3)}, -- dark blue
+        {0.5,  Color3.new(0.9, 0.95, 1.0)},  -- white
+        {1.0,  Color3.new(0.3, 0.9, 1.0)},   -- cyan
+    }
+
+    local function sampleGradient(stops, t)
+        t = math.clamp(t, 0, 1)
+
+        -- Find the two stops surrounding t
+        if t <= stops[1][1] then
+            local c = stops[1][2]
+            return Color3.new(c.R, c.G, c.B)
+        end
+
+        for i = 2, #stops do
+            if t <= stops[i][1] then
+                local prev = stops[i - 1]
+                local curr = stops[i]
+                local range = curr[1] - prev[1]
+                local frac = 0
+                if range > 0 then
+                    frac = (t - prev[1]) / range
+                end
+                local pc = prev[2]
+                local cc = curr[2]
+                return Color3.new(
+                    pc.R + (cc.R - pc.R) * frac,
+                    pc.G + (cc.G - pc.G) * frac,
+                    pc.B + (cc.B - pc.B) * frac
+                )
+            end
+        end
+
+        -- Past the last stop
+        local c = stops[#stops][2]
+        return Color3.new(c.R, c.G, c.B)
+    end
+
+    function GradientMap.Apply(color, gradientName)
+        local name = string.lower(gradientName)
+        local stops = gradients[name]
+        if not stops then
+            error("Unknown gradient: " .. tostring(gradientName) .. ". Available: sunset, ocean, forest, infrared, rainbow, fire, ice")
+        end
+
+        -- Map brightness to gradient
+        local brightness = 0.299 * color.R + 0.587 * color.G + 0.114 * color.B
+        return sampleGradient(stops, brightness)
+    end
+
+    PNG.GradientMap = GradientMap
+end
+
+----------------------------------------------------------------------
+-- Batch Pixel Access
+----------------------------------------------------------------------
+do
+    function PNG.BatchGetPixels(file, x1, y1, x2, y2)
+        -- Returns a 2D array: result[y][x] = {color, alpha}
+        -- More efficient than calling GetPixel in a loop due to
+        -- reduced function call overhead with local caching.
+        local getPixel = file.GetPixel
+        local result = {}
+
+        for y = y1, y2 do
+            local row = {}
+            for x = x1, x2 do
+                local color, alpha = getPixel(file, x, y)
+                row[x - x1 + 1] = {color, alpha}
+            end
+            result[y - y1 + 1] = row
+        end
+
+        return result
+    end
+end
+
+----------------------------------------------------------------------
+-- Mirror Utility
+----------------------------------------------------------------------
+do
+    function PNG.MirrorCoords(x, y, width, height, mode)
+        -- Remaps coordinates for mirror modes.
+        -- mode: "horizontal", "vertical", "both"
+        -- Returns remapped x, y (1-based coordinates)
+        local newX = x
+        local newY = y
+
+        if mode == "horizontal" or mode == "both" then
+            newX = width - x + 1
+        end
+
+        if mode == "vertical" or mode == "both" then
+            newY = height - y + 1
+        end
+
+        return newX, newY
     end
 end
 
