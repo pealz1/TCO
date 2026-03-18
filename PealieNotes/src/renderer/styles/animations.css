@@ -1,0 +1,159 @@
+/* ============================================================
+   Keyframes
+   ============================================================ */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+@keyframes slideOutLeft {
+  from { transform: translateX(0);     opacity: 1; }
+  to   { transform: translateX(-100%); opacity: 0; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes slideOutRight {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes slideInTop {
+  from { transform: translateY(-20px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+@keyframes slideInBottom {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+@keyframes scaleOut {
+  from { transform: scale(1);    opacity: 0; }
+  to   { transform: scale(0.95); opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+@keyframes glow {
+  0%, 100% { filter: drop-shadow(0 0 8px var(--accent)); }
+  50%       { filter: drop-shadow(0 0 16px var(--accent)); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   Utility Animation Classes
+   ============================================================ */
+
+.animate-fade-in {
+  animation: fadeIn 200ms ease forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 250ms ease forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 250ms ease forwards;
+}
+
+.animate-slide-in-top {
+  animation: slideInTop 250ms ease forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 200ms ease forwards;
+}
+
+.animate-pulse {
+  animation: pulse 2s ease infinite;
+}
+
+/* ============================================================
+   Interactive Element Transitions
+   ============================================================ */
+
+button {
+  transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+button:hover {
+  transform: scale(1.02);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+/* ============================================================
+   Note List Item Transitions
+   ============================================================ */
+
+.note-enter {
+  animation: slideInTop 200ms ease forwards;
+}
+
+.note-exit {
+  animation: slideOutLeft 250ms ease forwards, fadeOut 250ms ease forwards;
+}
+
+/* ============================================================
+   Modal
+   ============================================================ */
+
+.modal-backdrop {
+  animation: fadeIn 200ms ease forwards;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  animation: scaleIn 200ms ease forwards;
+}
+
+/* ============================================================
+   Context Menu
+   ============================================================ */
+
+.context-menu-enter {
+  animation: fadeIn 150ms ease forwards, contextMenuSlide 150ms ease forwards;
+}
+
+@keyframes contextMenuSlide {
+  from { transform: translateY(-8px); }
+  to   { transform: translateY(0); }
+}
+
+/* ============================================================
+   Tooltip
+   ============================================================ */
+
+.tooltip-enter {
+  animation: fadeIn 150ms ease forwards;
+  animation-delay: 400ms;
+  opacity: 0;
+}
