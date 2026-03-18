@@ -124,14 +124,16 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: white;
+  background: var(--bg-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   position: absolute;
   top: 2px;
   left: 2px;
-  transition: transform 200ms;
+  transition: transform 200ms, background 200ms;
 }
 
 .toggle.active::after {
+  background: var(--accent-text);
   transform: translateX(20px);
 }
 

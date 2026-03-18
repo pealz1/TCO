@@ -51,7 +51,7 @@ function highlightMatches(query) {
 
       const mark = document.createElement('mark');
       mark.setAttribute('data-find-highlight', '');
-      mark.style.background = 'rgba(255, 200, 0, 0.4)';
+      mark.style.background = 'color-mix(in srgb, var(--accent) 35%, transparent)';
       mark.style.borderRadius = '2px';
       range.surroundContents(mark);
 
@@ -79,10 +79,10 @@ function highlightMatches(query) {
 
 function setActiveMark(idx) {
   for (const m of matches) {
-    m.style.background = 'rgba(255, 200, 0, 0.4)';
+    m.style.background = 'color-mix(in srgb, var(--accent) 35%, transparent)';
   }
   if (idx >= 0 && idx < matches.length) {
-    matches[idx].style.background = 'rgba(255, 120, 0, 0.6)';
+    matches[idx].style.background = 'color-mix(in srgb, var(--accent) 60%, transparent)';
     matches[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 }
