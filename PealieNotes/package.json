@@ -4,7 +4,8 @@
   "description": "A professional-grade notes app for Windows",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "npm run build:renderer && electron .",
+    "dev": "electron .",
     "test": "vitest run",
     "test:watch": "vitest",
     "build:renderer": "esbuild src/renderer/app.js --bundle --outfile=src/renderer/bundle.js --format=iife --platform=browser --external:electron",

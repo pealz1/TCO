@@ -383,3 +383,10 @@
     transform: translateY(0);
   }
 }
+
+/* Drop highlight for image drag-and-drop */
+#editor-container.drop-highlight {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}

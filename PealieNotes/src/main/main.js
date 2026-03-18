@@ -57,7 +57,7 @@ function createWindow() {
     if (app.isQuitting) return;
     // Read config to check minimizeToTray
     try {
-      const configPath = path.join(app.getPath('userData'), 'config.json');
+      const configPath = path.join(app.getPath('userData'), 'pealie-notes', 'config.json');
       if (fs.existsSync(configPath)) {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         if (config.minimizeToTray !== false) {
