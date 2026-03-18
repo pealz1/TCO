@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 export function generateId() {
-  return randomUUID();
+  return crypto.randomUUID();
 }

@@ -1,3 +1,11 @@
+import { initTitlebar } from './components/titlebar.js';
+import { initSidebar } from './components/sidebar.js';
+import { initNotesList } from './components/notesList.js';
+import { initEditor } from './components/editor.js';
+import { initToolbar } from './components/toolbar.js';
+import { initStatusBar } from './components/statusBar.js';
+import { initFindReplace } from './components/findReplace.js';
+
 class EventBus extends EventTarget {
   emit(event, detail) {
     this.dispatchEvent(new CustomEvent(event, { detail }));
@@ -34,6 +42,18 @@ const app = {
     if (firstLaunch) {
       console.log('Pealie Notes: first launch detected');
     }
+
+    // Make app globally accessible before initializing components
+    window.app = app;
+
+    // Initialize components
+    initTitlebar();
+    initSidebar();
+    initNotesList();
+    initEditor();
+    initToolbar();
+    initStatusBar();
+    initFindReplace();
 
     console.log('Pealie Notes initialized');
     app.eventBus.emit('app:ready', { firstLaunch });

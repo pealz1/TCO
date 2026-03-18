@@ -1,0 +1,62 @@
+/* ============================================================
+   Status Bar
+   ============================================================ */
+
+#status-bar {
+  height: 28px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--statusbar-bg);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.status-left {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+}
+
+.status-center {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.save-indicator {
+  transition: opacity 300ms ease;
+}
+
+.status-right {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: center;
+}
+
+.zoom-slider {
+  width: 80px;
+  height: 4px;
+  appearance: none;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.zoom-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.zoom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
