@@ -31,9 +31,10 @@ const DEFAULT_CONFIG = {
 let basePath = null;
 
 // --- path helpers ---
+// Use synchronous path joining (Node fs accepts forward slashes on Windows)
 
 function join(...segments) {
-  return window.api.joinPath(...segments);
+  return segments.filter(Boolean).join('/');
 }
 
 function notesDir() {

@@ -8,6 +8,31 @@
               border-color 300ms ease, box-shadow 300ms ease;
 }
 
+/* ── Default (fallback before JS sets data-theme) ────────────────────────── */
+:root {
+  --bg-primary:      #ffffff;
+  --bg-secondary:    #f5f5f7;
+  --bg-tertiary:     #e8e8ed;
+  --bg-hover:        #ebebeb;
+  --bg-active:       #dcdcdc;
+  --text-primary:    #1d1d1f;
+  --text-secondary:  #636366;
+  --text-muted:      #8e8e93;
+  --accent:          #007AFF;
+  --accent-hover:    #0066dd;
+  --accent-text:     #ffffff;
+  --border:          #d1d1d6;
+  --border-light:    #e5e5ea;
+  --shadow:          0 1px 4px rgba(0, 0, 0, 0.10);
+  --sidebar-bg:      #f5f5f7;
+  --noteslist-bg:    #ffffff;
+  --editor-bg:       #ffffff;
+  --toolbar-bg:      #f5f5f7;
+  --statusbar-bg:    #e8e8ed;
+  --scrollbar-thumb: #c7c7cc;
+  --scrollbar-track: #f5f5f7;
+}
+
 /* ── 1. Light ────────────────────────────────────────────────────────────── */
 :root[data-theme="light"] {
   --bg-primary:      #ffffff;

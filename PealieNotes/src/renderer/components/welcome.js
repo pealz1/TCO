@@ -206,14 +206,16 @@ function renderDoneStep(screen) {
   `;
 
   screen.querySelector('#welcome-start').addEventListener('click', async () => {
-    // Save config
-    const config = await storage.loadConfig();
-    config.firstLaunch = false;
-    config.displayName = selectedName;
-    config.theme = selectedTheme;
-    await storage.saveConfig(config);
-    store.set('config', config);
-
+    try {
+      const config = await storage.loadConfig();
+      config.firstLaunch = false;
+      config.displayName = selectedName;
+      config.theme = selectedTheme;
+      await storage.saveConfig(config);
+      store.set('config', config);
+    } catch (err) {
+      console.error('Welcome save error:', err);
+    }
     hideWelcome();
   });
 }
