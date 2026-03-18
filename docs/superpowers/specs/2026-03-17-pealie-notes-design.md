@@ -40,7 +40,8 @@ PealieNotes/
 │   │   └── <note-id>/
 │   │       ├── note.json    # Note metadata (title, created, modified, tags, pinned, favorited)
 │   │       ├── content.html # Note content (TipTap HTML output)
-│   │       └── versions/    # Version history
+│   │       ├── assets/      # Images and attachments for this note
+│   │       └── versions/    # Version history (pruned on save, keeps last 10)
 │   │           ├── v1.html
 │   │           └── v2.html
 │   └── uncategorized/       # Default folder
@@ -323,7 +324,7 @@ Progress indicator (dots) at the bottom of each step.
 | Shortcut | Action |
 |----------|--------|
 | Ctrl+N | New note |
-| Ctrl+Shift+N | Quick note (global) |
+| Ctrl+Shift+N | Quick note (global, OS-level — rebindable in settings) |
 | Ctrl+Delete | Trash note |
 | Ctrl+F | Find in note |
 | Ctrl+H | Find and replace |
