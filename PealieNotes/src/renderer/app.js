@@ -6,6 +6,10 @@ import { initToolbar } from './components/toolbar.js';
 import { initStatusBar } from './components/statusBar.js';
 import { initFindReplace } from './components/findReplace.js';
 import { initSearch } from './components/search.js';
+import { initShortcuts, registerShortcut } from './shortcuts.js';
+import { initSettings } from './components/settings.js';
+import { initWelcome } from './components/welcome.js';
+import { store } from './store.js';
 
 class EventBus extends EventTarget {
   emit(event, detail) {
@@ -56,6 +60,22 @@ const app = {
     initStatusBar();
     initFindReplace();
     initSearch();
+    initShortcuts();
+    initSettings();
+    initWelcome();
+
+    // Register built-in keyboard shortcuts
+    registerShortcut('settings', () => {
+      const current = store.get('view');
+      store.set('view', current === 'settings' ? 'main' : 'settings');
+    });
+
+    // Listen for quick-note from tray
+    if (window.api && window.api.onQuickNote) {
+      window.api.onQuickNote(() => {
+        app.eventBus.emit('quick-note');
+      });
+    }
 
     console.log('Pealie Notes initialized');
     app.eventBus.emit('app:ready', { firstLaunch });

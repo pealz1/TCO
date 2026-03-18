@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { createTray, destroyTray } = require('./tray.js');
+const { registerGlobalShortcuts, unregisterAll } = require('./globalShortcuts.js');
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -49,14 +51,49 @@ function createWindow() {
   mainWindow.on('unmaximize', () => {
     mainWindow.webContents.send('window-unmaximized');
   });
+
+  // Close-to-tray: hide instead of quit if config says so
+  mainWindow.on('close', (event) => {
+    if (app.isQuitting) return;
+    // Read config to check minimizeToTray
+    try {
+      const configPath = path.join(app.getPath('userData'), 'config.json');
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        if (config.minimizeToTray !== false) {
+          event.preventDefault();
+          mainWindow.hide();
+          return;
+        }
+      }
+    } catch {
+      // If config read fails, just close normally
+    }
+  });
 }
 
 app.whenReady().then(() => {
   createWindow();
 
+  // System tray
+  const iconPath = path.join(__dirname, '../assets/icon.svg');
+  createTray(mainWindow, iconPath);
+
+  // Global shortcuts
+  registerGlobalShortcuts(mainWindow);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('before-quit', () => {
+  app.isQuitting = true;
+});
+
+app.on('will-quit', () => {
+  unregisterAll();
+  destroyTray();
 });
 
 app.on('window-all-closed', () => {

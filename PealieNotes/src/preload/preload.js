@@ -36,4 +36,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // Export
   printToPDF: (options) => ipcRenderer.invoke('printToPDF', options),
+
+  // Tray / Quick note
+  onQuickNote: (cb) => ipcRenderer.on('quick-note', cb),
+  offQuickNote: (cb) => ipcRenderer.off('quick-note', cb),
 });
