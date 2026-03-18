@@ -15,18 +15,25 @@ export function initSidebar() {
     </div>
     <div class="smart-folders">
       <div class="smart-folder-item active" data-folder="all">
-        <span class="sf-icon">📋</span>All Notes
+        <span class="sf-icon">\uD83D\uDCCB</span>All Notes
         <span class="folder-count"></span>
       </div>
       <div class="smart-folder-item" data-folder="favorites">
-        <span class="sf-icon">⭐</span>Favorites
+        <span class="sf-icon">\u2B50</span>Favorites
         <span class="folder-count"></span>
       </div>
     </div>
     <div class="folder-tree"></div>
     <button class="new-folder-btn">+ New Folder</button>
+    <div class="tags-section">
+      <div class="tags-header">
+        <span class="tags-chevron">\u25B6</span>
+        <span class="tags-label">Tags</span>
+      </div>
+      <div class="tags-list" style="display:none"></div>
+    </div>
     <div class="trash-item" data-folder="trash">
-      <span class="sf-icon">🗑</span>Trash
+      <span class="sf-icon">\uD83D\uDDD1</span>Trash
       <span class="folder-count"></span>
     </div>
   `;
@@ -57,12 +64,28 @@ export function initSidebar() {
     }
   };
 
+  // Tags section toggle
+  const tagsHeader = sidebar.querySelector('.tags-header');
+  const tagsList = sidebar.querySelector('.tags-list');
+  const tagsChevron = sidebar.querySelector('.tags-chevron');
+  let tagsExpanded = false;
+
+  tagsHeader.onclick = () => {
+    tagsExpanded = !tagsExpanded;
+    tagsList.style.display = tagsExpanded ? 'block' : 'none';
+    tagsChevron.classList.toggle('expanded', tagsExpanded);
+    soundEngine.play('click');
+  };
+
   // Subscribe to store changes
   store.on('activeFolder', renderActiveState);
   store.on('folders', renderFolderTree);
   store.on('notes', updateCounts);
+  store.on('config', renderTags);
+  store.on('notes', renderTags);
 
   renderFolderTree();
+  renderTags();
 }
 
 function renderFolderTree() {
@@ -159,6 +182,34 @@ function renderActiveState() {
 
 function getNoteCount(folderId) {
   return store.get('notes').filter(n => n.folderId === folderId).length;
+}
+
+function renderTags() {
+  const tagsList = document.querySelector('.tags-list');
+  if (!tagsList) return;
+
+  const config = store.get('config') || {};
+  const tags = config.tags || [];
+  const notes = store.get('notes') || [];
+
+  tagsList.innerHTML = '';
+
+  tags.forEach(tag => {
+    const count = notes.filter(n => (n.tags || []).includes(tag.id)).length;
+    const item = document.createElement('div');
+    item.className = 'tag-sidebar-item' + (store.get('activeFolder') === 'tag:' + tag.id ? ' active' : '');
+    item.dataset.folder = 'tag:' + tag.id;
+    item.innerHTML = `
+      <span class="tag-dot" style="background:${tag.color}"></span>
+      <span class="tag-name">${tag.name}</span>
+      <span class="folder-count">${count}</span>
+    `;
+    item.onclick = () => {
+      store.set('activeFolder', 'tag:' + tag.id);
+      soundEngine.play('click');
+    };
+    tagsList.appendChild(item);
+  });
 }
 
 function updateCounts() { renderFolderTree(); }

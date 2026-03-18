@@ -5,6 +5,7 @@ import { initEditor } from './components/editor.js';
 import { initToolbar } from './components/toolbar.js';
 import { initStatusBar } from './components/statusBar.js';
 import { initFindReplace } from './components/findReplace.js';
+import { initSearch } from './components/search.js';
 
 class EventBus extends EventTarget {
   emit(event, detail) {
@@ -54,6 +55,7 @@ const app = {
     initToolbar();
     initStatusBar();
     initFindReplace();
+    initSearch();
 
     console.log('Pealie Notes initialized');
     app.eventBus.emit('app:ready', { firstLaunch });

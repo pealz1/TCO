@@ -382,6 +382,210 @@ export async function saveConfig(config) {
   await window.api.writeFile(configPath(), JSON.stringify(config, null, 2));
 }
 
+// --- Tags ---
+
+export async function createTag(name, color) {
+  const config = await loadConfig();
+  const id = 'tag_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  const tag = { id, name, color };
+  config.tags = config.tags || [];
+  config.tags.push(tag);
+  await saveConfig(config);
+  return tag;
+}
+
+export async function deleteTag(id) {
+  const config = await loadConfig();
+  config.tags = (config.tags || []).filter(t => t.id !== id);
+  await saveConfig(config);
+}
+
+export async function addTagToNote(noteId, folderId, tagId) {
+  const metaPath = join(noteDir(folderId, noteId), 'note.json');
+  const raw = await window.api.readFile(metaPath);
+  const note = JSON.parse(raw);
+  note.tags = note.tags || [];
+  if (!note.tags.includes(tagId)) {
+    note.tags.push(tagId);
+    await window.api.writeFile(metaPath, JSON.stringify(note, null, 2));
+  }
+  return note;
+}
+
+export async function removeTagFromNote(noteId, folderId, tagId) {
+  const metaPath = join(noteDir(folderId, noteId), 'note.json');
+  const raw = await window.api.readFile(metaPath);
+  const note = JSON.parse(raw);
+  note.tags = (note.tags || []).filter(t => t !== tagId);
+  await window.api.writeFile(metaPath, JSON.stringify(note, null, 2));
+  return note;
+}
+
+// --- Export / Import ---
+
+export async function exportAsHTML(noteId, folderId) {
+  const content = await loadNoteContent(noteId, folderId);
+  const metaPath = join(noteDir(folderId, noteId), 'note.json');
+  const raw = await window.api.readFile(metaPath);
+  const note = JSON.parse(raw);
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${(note.title || 'Untitled').replace(/</g, '&lt;')}</title>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #333; }
+  h1, h2, h3 { color: #111; }
+  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+  pre { background: #f4f4f4; padding: 16px; border-radius: 6px; overflow-x: auto; }
+  blockquote { border-left: 3px solid #ddd; margin-left: 0; padding-left: 16px; color: #666; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #ddd; padding: 8px; }
+  th { background: #f4f4f4; }
+</style>
+</head>
+<body>
+${content}
+</body>
+</html>`;
+
+  await window.api.showSaveDialog({
+    defaultPath: (note.title || 'Untitled') + '.html',
+    filters: [{ name: 'HTML', extensions: ['html'] }]
+  }).then(async (result) => {
+    if (result && !result.canceled && result.filePath) {
+      await window.api.writeFile(result.filePath, html);
+    }
+  });
+}
+
+export async function exportAsText(noteId, folderId) {
+  const content = await loadNoteContent(noteId, folderId);
+  const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const metaPath = join(noteDir(folderId, noteId), 'note.json');
+  const raw = await window.api.readFile(metaPath);
+  const note = JSON.parse(raw);
+
+  await window.api.showSaveDialog({
+    defaultPath: (note.title || 'Untitled') + '.txt',
+    filters: [{ name: 'Text', extensions: ['txt'] }]
+  }).then(async (result) => {
+    if (result && !result.canceled && result.filePath) {
+      await window.api.writeFile(result.filePath, text);
+    }
+  });
+}
+
+export async function exportAsMarkdown(noteId, folderId) {
+  const content = await loadNoteContent(noteId, folderId);
+  const metaPath = join(noteDir(folderId, noteId), 'note.json');
+  const raw = await window.api.readFile(metaPath);
+  const note = JSON.parse(raw);
+
+  // Basic HTML to Markdown conversion
+  let md = content;
+  md = md.replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n');
+  md = md.replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n');
+  md = md.replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n');
+  md = md.replace(/<strong>(.*?)<\/strong>/gi, '**$1**');
+  md = md.replace(/<b>(.*?)<\/b>/gi, '**$1**');
+  md = md.replace(/<em>(.*?)<\/em>/gi, '*$1*');
+  md = md.replace(/<i>(.*?)<\/i>/gi, '*$1*');
+  md = md.replace(/<u>(.*?)<\/u>/gi, '$1');
+  md = md.replace(/<s>(.*?)<\/s>/gi, '~~$1~~');
+  md = md.replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+  md = md.replace(/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*\/?>/gi, '![$2]($1)');
+  md = md.replace(/<img[^>]*src="([^"]*)"[^>]*\/?>/gi, '![]($1)');
+  md = md.replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gi, '> $1\n');
+  md = md.replace(/<code>(.*?)<\/code>/gi, '`$1`');
+  md = md.replace(/<pre[^>]*><code[^>]*>(.*?)<\/code><\/pre>/gis, '```\n$1\n```\n');
+  md = md.replace(/<hr\s*\/?>/gi, '---\n\n');
+  md = md.replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n');
+  md = md.replace(/<\/?(ul|ol|p|div|br\s*\/?|table|tr|td|th|thead|tbody)[^>]*>/gi, '\n');
+  md = md.replace(/<[^>]+>/g, '');
+  md = md.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ');
+  md = md.replace(/\n{3,}/g, '\n\n').trim();
+
+  await window.api.showSaveDialog({
+    defaultPath: (note.title || 'Untitled') + '.md',
+    filters: [{ name: 'Markdown', extensions: ['md'] }]
+  }).then(async (result) => {
+    if (result && !result.canceled && result.filePath) {
+      await window.api.writeFile(result.filePath, md);
+    }
+  });
+}
+
+export async function exportAsPDF(noteId, folderId) {
+  if (window.api.printToPDF) {
+    const result = await window.api.printToPDF();
+    if (result) {
+      const metaPath = join(noteDir(folderId, noteId), 'note.json');
+      const raw = await window.api.readFile(metaPath);
+      const note = JSON.parse(raw);
+
+      const saveResult = await window.api.showSaveDialog({
+        defaultPath: (note.title || 'Untitled') + '.pdf',
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+      });
+      if (saveResult && !saveResult.canceled && saveResult.filePath) {
+        await window.api.writeFile(saveResult.filePath, result);
+      }
+    }
+  }
+}
+
+export async function importFile(filePath, folderId) {
+  const content = await window.api.readFile(filePath);
+  const ext = filePath.split('.').pop().toLowerCase();
+  let html = '';
+
+  if (ext === 'html' || ext === 'htm') {
+    html = content;
+  } else if (ext === 'md' || ext === 'markdown') {
+    // Basic markdown to HTML
+    html = content;
+    html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    html = html.replace(/~~(.*?)~~/g, '<s>$1</s>');
+    html = html.replace(/`(.*?)`/g, '<code>$1</code>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    html = html.replace(/^- (.*$)/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    html = html.replace(/^---$/gm, '<hr>');
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = '<p>' + html + '</p>';
+  } else {
+    // Plain text
+    html = '<p>' + content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+  }
+
+  const note = await createNote(folderId, html);
+  return note;
+}
+
+export async function importMultiple(folderId) {
+  const result = await window.api.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Documents', extensions: ['html', 'htm', 'md', 'txt', 'markdown'] }
+    ]
+  });
+
+  if (!result || result.canceled || !result.filePaths) return [];
+
+  const notes = [];
+  for (const filePath of result.filePaths) {
+    const note = await importFile(filePath, folderId);
+    notes.push(note);
+  }
+  return notes;
+}
+
 // --- Stats ---
 
 export async function getStorageStats() {

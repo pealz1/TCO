@@ -1,5 +1,7 @@
 import { getEditor } from './editor.js';
 import { soundEngine } from '../sounds.js';
+import { openGrammarPanel } from './grammarPanel.js';
+import { openVersionHistory } from './versionHistory.js';
 
 const PRESET_COLORS = [
   '#000000', '#434343', '#666666', '#999999',
@@ -280,6 +282,16 @@ export function initToolbar() {
     insertSelect.value = '';
   });
 
+  // --- Grammar check button ---
+  const grammarBtn = btn('grammar-btn', 'Check Grammar', 'Aa', () => {
+    openGrammarPanel();
+  });
+
+  // --- Version history button ---
+  const versionBtn = btn('version-btn', 'Version History', '\uD83D\uDD50', () => {
+    openVersionHistory();
+  });
+
   // --- Assemble toolbar ---
   toolbar.appendChild(group(styleSelect));
   toolbar.appendChild(group(fontSelect));
@@ -294,6 +306,8 @@ export function initToolbar() {
   toolbar.appendChild(group(indentBtn, outdentBtn));
   toolbar.appendChild(divider());
   toolbar.appendChild(group(linkBtn, insertSelect));
+  toolbar.appendChild(divider());
+  toolbar.appendChild(group(grammarBtn, versionBtn));
 
   // --- Update active states on selection change ---
   window.app?.eventBus?.on('editor:selection', (e) => {

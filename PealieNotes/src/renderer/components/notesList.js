@@ -1,10 +1,11 @@
 import { store } from '../store.js';
 import { soundEngine } from '../sounds.js';
 import { showContextMenu } from './contextMenu.js';
-import { showConfirm } from './modal.js';
+import { showConfirm, showPrompt } from './modal.js';
 import * as storage from '../storage.js';
 import { formatDate, truncate } from '../utils/format.js';
 import { debounce } from '../utils/debounce.js';
+import { showTemplatePicker } from './templates.js';
 
 let currentSort = 'modified'; // modified, created, title, manual
 
@@ -43,16 +44,10 @@ export function initNotesList() {
     renderNotes();
   });
 
-  // New Note
-  panel.querySelector('.new-note-btn').onclick = async () => {
-    const activeFolder = store.get('activeFolder');
-    const folderId = (activeFolder === 'all' || activeFolder === 'favorites' || activeFolder === 'trash')
-      ? 'uncategorized' : activeFolder;
-    const note = await storage.createNote(folderId);
-    const notes = await storage.loadAllNotes();
-    store.set('notes', notes);
-    store.set('activeNote', note.id);
-    soundEngine.play('pop');
+  // New Note — show template picker
+  const newNoteBtn = panel.querySelector('.new-note-btn');
+  newNoteBtn.onclick = () => {
+    showTemplatePicker(newNoteBtn);
   };
 
   // Subscribe to store changes
@@ -78,6 +73,9 @@ function renderNotes() {
   } else if (activeFolder === 'trash') {
     // TODO: load from trash separately
     notes = [];
+  } else if (activeFolder.startsWith('tag:')) {
+    const tagId = activeFolder.slice(4);
+    notes = notes.filter(n => (n.tags || []).includes(tagId));
   } else {
     notes = notes.filter(n => n.folderId === activeFolder);
   }
@@ -150,6 +148,13 @@ function renderNotes() {
           store.set('notes', notes);
         }},
         { separator: true },
+        { label: 'Add Tag', action: () => showTagPicker(note) },
+        { separator: true },
+        { label: 'Export as HTML', action: () => storage.exportAsHTML(note.id, note.folderId) },
+        { label: 'Export as Text', action: () => storage.exportAsText(note.id, note.folderId) },
+        { label: 'Export as Markdown', action: () => storage.exportAsMarkdown(note.id, note.folderId) },
+        { label: 'Export as PDF', action: () => storage.exportAsPDF(note.id, note.folderId) },
+        { separator: true },
         { label: 'Duplicate', action: async () => {
           await storage.duplicateNote(note.id, note.folderId, note.folderId);
           const notes = await storage.loadAllNotes();
@@ -185,4 +190,74 @@ function updateActiveNote() {
   document.querySelectorAll('.note-card').forEach(card => {
     card.classList.toggle('active', card.dataset.noteId === store.get('activeNote'));
   });
+}
+
+const TAG_COLORS = ['#E81123', '#FF6900', '#FCB900', '#00D084', '#0693E3', '#AB149E', '#8B5CF6', '#666666'];
+
+async function showTagPicker(note) {
+  const config = store.get('config') || {};
+  const tags = config.tags || [];
+  const noteTags = note.tags || [];
+
+  const body = document.createElement('div');
+  body.className = 'tag-picker-body';
+
+  if (tags.length > 0) {
+    tags.forEach(tag => {
+      const row = document.createElement('label');
+      row.className = 'tag-picker-row';
+      const checked = noteTags.includes(tag.id) ? 'checked' : '';
+      row.innerHTML = `
+        <input type="checkbox" data-tag-id="${tag.id}" ${checked}>
+        <span class="tag-dot" style="background:${tag.color}"></span>
+        <span>${tag.name}</span>
+      `;
+      body.appendChild(row);
+    });
+  } else {
+    body.innerHTML = '<p style="color:var(--text-secondary);margin:0 0 8px">No tags yet</p>';
+  }
+
+  const newBtn = document.createElement('button');
+  newBtn.className = 'modal-btn modal-btn-secondary';
+  newBtn.textContent = '+ New Tag';
+  newBtn.style.marginTop = '8px';
+  newBtn.onclick = async () => {
+    const name = await showPrompt('Tag name:', { title: 'New Tag' });
+    if (!name) return;
+    const color = TAG_COLORS[tags.length % TAG_COLORS.length];
+    const tag = await storage.createTag(name, color);
+    const updatedConfig = await storage.loadConfig();
+    store.set('config', updatedConfig);
+    await storage.addTagToNote(note.id, note.folderId, tag.id);
+    const notes = await storage.loadAllNotes();
+    store.set('notes', notes);
+    soundEngine.play('pop');
+  };
+  body.appendChild(newBtn);
+
+  const { showModal } = await import('./modal.js');
+  const result = await showModal({
+    title: 'Tags',
+    body,
+    buttons: [
+      { id: 'cancel', label: 'Cancel' },
+      { id: 'save', label: 'Save', primary: true }
+    ]
+  });
+
+  if (result === 'save') {
+    const checkboxes = body.querySelectorAll('input[type="checkbox"]');
+    for (const cb of checkboxes) {
+      const tagId = cb.dataset.tagId;
+      if (cb.checked && !noteTags.includes(tagId)) {
+        await storage.addTagToNote(note.id, note.folderId, tagId);
+      } else if (!cb.checked && noteTags.includes(tagId)) {
+        await storage.removeTagFromNote(note.id, note.folderId, tagId);
+      }
+    }
+    const notes = await storage.loadAllNotes();
+    store.set('notes', notes);
+    soundEngine.play('pop');
+  }
 }
