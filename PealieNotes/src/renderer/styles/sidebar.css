@@ -1,0 +1,179 @@
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar-bg);
+  background-image: var(--sidebar-gradient, none);
+}
+
+.sidebar-header {
+  height: 44px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 12px;
+  justify-content: space-between;
+}
+
+.sidebar-collapse-btn {
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.smart-folders {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.smart-folder-item {
+  height: 36px;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.smart-folder-item:hover {
+  background: var(--bg-hover);
+}
+
+.smart-folder-item.active {
+  background: var(--bg-active);
+  color: var(--accent);
+}
+
+.folder-tree {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.folder-item {
+  height: 34px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 6px;
+  margin: 1px 4px;
+  color: var(--text-primary);
+}
+
+.folder-item:hover {
+  background: var(--bg-hover);
+}
+
+.folder-item.active {
+  background: var(--bg-active);
+}
+
+.folder-chevron {
+  width: 16px;
+  font-size: 10px;
+  transition: transform 200ms ease;
+  display: inline-block;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.folder-chevron.invisible {
+  visibility: hidden;
+}
+
+.folder-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.folder-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.folder-item.drop-target {
+  outline: 2px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.new-folder-btn {
+  padding: 8px 16px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13px;
+  background: none;
+  border: none;
+  width: 100%;
+}
+
+.new-folder-btn:hover {
+  background: var(--bg-hover);
+}
+
+.trash-item {
+  height: 36px;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-top: auto;
+  color: var(--text-primary);
+}
+
+.trash-item:hover {
+  background: var(--bg-hover);
+}
+
+.trash-item.active {
+  background: var(--bg-active);
+  color: var(--accent);
+}
+
+.folder-item.editing .folder-name-input {
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+}
