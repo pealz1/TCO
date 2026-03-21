@@ -13,10 +13,10 @@ if game.PlaceId ~= 11137575513 and game.PlaceId ~= 12943245078 and game.PlaceId 
 end
  
 
- joinURL = string.format(
-    "[**Join Player**](https://www.roblox.com/games/start?placeId=%s&gameInstanceId=%s)",
-    game.PlaceId,
-    game.JobId
+joinURL = string.format(
+    "[Join Server](https://www.roblox.com/games/start?placeId=%s&gameInstanceId=%s)",
+    tostring(game.PlaceId),
+    tostring(game.JobId)
 )
 
 function main()
@@ -68,25 +68,17 @@ bbsbox.Parent = CoreGui
 end
 
 plr = Players.LocalPlayer
- function markHubActive()
-    if plr.Character then
-        if not plr.Character:FindFirstChild("RomazHubActive") then
-             m = Instance.new("BoolValue")
-            m.Name = "RomazHubActive"
-            m.Value = true
-            m.Parent = plr.Character
-        end
-    end
-end
-markHubActive()
-plr.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    markHubActive()
-end)
 localplr = game.Players.LocalPlayer
 mouse = plr:GetMouse()
 tools = {}
 scriptConnections = {}
+isog = workspace:FindFirstChild("Cubes") ~= nil
+if isog then
+    cfolder = workspace.Cubes
+else
+    cfolder = workspace:WaitForChild("Bricks")
+end
+brickname = isog and "Cube" or "Brick"
 playerGui = plr:WaitForChild("PlayerGui")
 antiConnections = {}
 OWNER_ID = {
@@ -457,77 +449,31 @@ function sendActionWebhook(action, description)
     end)
 end
 
-repo = 'https://raw.githubusercontent.com/pealz1/LinoriaLib-Mobile/refs/heads/main/'
+peallib = 'https://raw.githubusercontent.com/pealz1/PealLib/main/'
 
-local function loadCached(url, cacheFile)
+local function loadAddonCached(url, cacheFile)
     pcall(makefolder, "RomazHubCache")
     local path = "RomazHubCache/" .. cacheFile
-    local content = nil
     pcall(function()
         if isfile and isfile(path) then
             local data = readfile(path)
             if data and #data > 200 then
-                content = data
+                local ok, fn = pcall(loadstring, data)
+                if ok and fn then return fn() end
             end
         end
     end)
-    if not content then
-        local ok, result = pcall(function() return game:HttpGet(url) end)
-        if ok and result then
-            content = result
-            pcall(writefile, path, content)
-        end
-    end
-    if content then
-        local ok, fn = pcall(loadstring, content)
-        if ok and fn then return fn() end
-    end
-    return loadstring(game:HttpGet(url))()
-end
-
-pcall(function()
-    if isfile and isfile("RomazHubCache/Library.lua") then
-        delfile("RomazHubCache/Library.lua")
-    end
-end)
-Library = loadCached(repo .. 'Library.lua', 'Library.lua')
-ThemeManager = loadCached(repo .. 'addons/ThemeManager.lua', 'ThemeManager.lua')
-SaveManager = loadCached(repo .. 'addons/SaveManager.lua', 'SaveManager.lua')
-
-if not Library.CreateToolImagePreview then
-    function Library:CreateToolImagePreview(parent, yPos)
-        local container = Library:Create('Frame', {
-            AnchorPoint      = Vector2.new(0.5, 0);
-            BackgroundColor3 = Library.BackgroundColor;
-            BorderSizePixel  = 0;
-            Position         = UDim2.new(0.5, 0, yPos, 0);
-            Size             = UDim2.new(0.88, 0, 0, 0);
-            ZIndex           = 5;
-            Parent           = parent;
-        })
-        Library:Create('UIAspectRatioConstraint', { AspectRatio = 1; Parent = container })
-        Library:Create('UICorner', { CornerRadius = UDim.new(0, 4); Parent = container })
-        Library:AddToRegistry(container, { BackgroundColor3 = 'BackgroundColor' })
-        local img = Library:Create('ImageLabel', {
-            BackgroundTransparency = 1;
-            Size                   = UDim2.new(1, 0, 1, 0);
-            ScaleType              = Enum.ScaleType.Fit;
-            Image                  = '';
-            ZIndex                 = 6;
-            Parent                 = container;
-        })
-        local preview = {}
-        function preview:SetImage(id)
-            img.Image = id and id ~= '' and ('rbxassetid://' .. tostring(id)) or ''
-        end
-        function preview:SetVisible(vis)
-            container.Visible = vis
-        end
-        preview.container = container
-        preview.label = img
-        return preview
+    local ok, result = pcall(function() return game:HttpGet(url) end)
+    if ok and result then
+        pcall(writefile, path, result)
+        local ok2, fn = pcall(loadstring, result)
+        if ok2 and fn then return fn() end
     end
 end
+
+Library = loadstring(game:HttpGet(peallib .. 'Library.lua'))()
+ThemeManager = loadAddonCached(peallib .. 'addons/ThemeManager.lua', 'ThemeManager.lua')
+SaveManager = loadAddonCached(peallib .. 'addons/SaveManager.lua', 'SaveManager.lua')
 
  UserInputService = game:GetService("UserInputService")
  isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
@@ -1508,7 +1454,7 @@ function StartAura(auraType)
                         targetHrp.Position + Vector3.new(auraSettings[auraType].range, 5, auraSettings[auraType].range)
                     ), nil, math.huge)
                 for _, block in ipairs(blocks) do
-                    if block:IsDescendantOf(workspace.Bricks) then
+                    if block:IsDescendantOf(cfolder) then
                         ExecuteDelete(block); break
                     end
                 end
@@ -1531,7 +1477,7 @@ function StartAura(auraType)
                     if ps and ps:FindFirstChild("Event") then
                          painted = 0
                         for _, blk in ipairs(nearby) do
-                            if blk:IsDescendantOf(workspace.Bricks) then
+                            if blk:IsDescendantOf(cfolder) then
                                 ps.Event:FireServer(blk, Enum.NormalId.Top, targetHrp.Position, "color", rainCol, "", "")
                                 painted = painted + 1
                                 if painted >= 5 then break end
@@ -1541,7 +1487,7 @@ function StartAura(auraType)
                         if auraSettings.rainbowAura.terrain then
                             local tPainted = 0
                             for _, blk in ipairs(nearby) do
-                                if blk:IsA("BasePart") and not blk:IsDescendantOf(workspace.Bricks) and blk.Name ~= "HumanoidRootPart" and not blk:IsDescendantOf(plr.Character or game) then
+                                if blk:IsA("BasePart") and not blk:IsDescendantOf(cfolder) and blk.Name ~= "HumanoidRootPart" and not blk:IsDescendantOf(plr.Character or game) then
                                     ps.Event:FireServer(blk, Enum.NormalId.Top, targetHrp.Position, "color", rainCol, "", "")
                                     tPainted = tPainted + 1
                                     if tPainted >= 3 then break end
@@ -1563,7 +1509,7 @@ function StartAura(auraType)
                      ps = pt:FindFirstChild("Script")
                     if ps and ps:FindFirstChild("Event") then
                         for _, blk in ipairs(toxBlocks) do
-                            if blk:IsDescendantOf(workspace.Bricks) then
+                            if blk:IsDescendantOf(cfolder) then
                                 ps.Event:FireServer(blk, Enum.NormalId.Top, targetHrp.Position, "material", Color3.new(0,0,0), "toxic", "")
                                 break
                             end
@@ -1587,7 +1533,7 @@ function StartAura(auraType)
                      ps = pt:FindFirstChild("Script")
                     if ps and ps:FindFirstChild("Event") then
                         for _, blk in ipairs(ab) do
-                            if blk:IsDescendantOf(workspace.Bricks) and not blk.Anchored then
+                            if blk:IsDescendantOf(cfolder) and not blk.Anchored then
                                 ps.Event:FireServer(blk, Enum.NormalId.Top, targetHrp.Position, "material", nil, "anchor", "")
                                 break
                             end
@@ -1607,7 +1553,7 @@ function StartAura(auraType)
                      ps = pt:FindFirstChild("Script")
                     if ps and ps:FindFirstChild("Event") then
                         for _, blk in ipairs(ub) do
-                            if blk:IsDescendantOf(workspace.Bricks) and blk.Anchored then
+                            if blk:IsDescendantOf(cfolder) and blk.Anchored then
                                 ps.Event:FireServer(blk, Enum.NormalId.Top, targetHrp.Position, "material", nil, "anchor", "")
                                 break
                             end
@@ -1745,13 +1691,13 @@ end
 end
 
  function getPlayerBuildCount(player)
-     folder = workspace.Bricks:FindFirstChild(player.Name)
+     folder = cfolder:FindFirstChild(player.Name)
     if folder then return #folder:GetChildren() end
     return 0
 end
 
  function getPlayerBuildCenter(player)
-     folder = workspace.Bricks:FindFirstChild(player.Name)
+     folder = cfolder:FindFirstChild(player.Name)
     if not folder then return nil end
      parts = folder:GetChildren()
     if #parts == 0 then return nil end
@@ -2025,7 +1971,7 @@ end
 
 function CreateBuildESP(player)
     RemoveBuildESP(player)
-     folder = workspace.Bricks:FindFirstChild(player.Name)
+     folder = cfolder:FindFirstChild(player.Name)
     if not folder then return end
     if #folder:GetChildren() == 0 then return end
 
@@ -2564,47 +2510,6 @@ task.spawn(function()
     startRelayHeartbeatLoop()
 end)
 
-function hookUserBillboards()
-    local function tryTag(p)
-        if not p or not p.Character then return end
-        for _, id in ipairs(OWNER_ID) do if p.UserId == id then return end end
-        for _, id in ipairs(BUYER_IDS) do if p.UserId == id then return end end
-        if not confirmedHubUsers[p] then
-            confirmedHubUsers[p] = true
-            watchHubUserRespawn(p)
-        end
-        createUserBillboard(p, true)
-    end
-
-    local function watchCharacter(p, char)
-        char.ChildAdded:Connect(function(child)
-            if child.Name == "RomazHubActive" then
-                tryTag(p)
-            end
-        end)
-        if char:FindFirstChild("RomazHubActive") then
-            tryTag(p)
-        end
-    end
-
-    local function watchPlayer(p)
-        if p.Character then watchCharacter(p, p.Character) end
-        p.CharacterAdded:Connect(function(char)
-            task.wait(1)
-            watchCharacter(p, char)
-        end)
-    end
-
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= plr then watchPlayer(p) end
-    end
-    Players.PlayerAdded:Connect(function(p)
-        task.wait(2)
-        watchPlayer(p)
-    end)
-end
-hookUserBillboards()
-
  function createOwnerBillboard(player)
     createStyledBillboard(player, {
         bbName = "OwnerBB",
@@ -2654,7 +2559,7 @@ function StartDeleteAura()
         )
         
         for _, part in ipairs(parts) do
-            if part:IsDescendantOf(workspace.Bricks) then
+            if part:IsDescendantOf(cfolder) then
                 ExecuteDelete(part)
                 break
             end
@@ -4183,7 +4088,7 @@ listfilesfixed = function(directory)
     end
     return lf
 end
-plrbuilds = {ServerBuilds = workspace.Bricks}
+plrbuilds = {ServerBuilds = cfolder}
 plrnames = {"ServerBuilds"}
 buildhighlight = Instance.new("Highlight")
 buildhighlight.Parent = game.CoreGui
@@ -4223,8 +4128,8 @@ snap = function(pos,m)
     return pos
 end
 
-if workspace.Bricks:FindFirstChild(game.Players.LocalPlayer.Name) then
-    cubechild = workspace.Bricks[game.Players.LocalPlayer.Name].ChildAdded:Connect(function(child)
+if cfolder:FindFirstChild(game.Players.LocalPlayer.Name) then
+    cubechild = cfolder[game.Players.LocalPlayer.Name].ChildAdded:Connect(function(child)
         childcube = child
         historynum = historynum + 1
         if historynum > historymax then
@@ -4237,7 +4142,7 @@ if workspace.Bricks:FindFirstChild(game.Players.LocalPlayer.Name) then
         built = true
     end)
 else
-    cubechild = workspace.Bricks.ChildAdded:Connect(function()
+    cubechild = cfolder.ChildAdded:Connect(function()
     end)
 end
 
@@ -4909,7 +4814,7 @@ if getgenv().brickcollection == nil then
 end
 
  function dbc(b)
-    if not b:IsA("BasePart") or b.Name ~= "Brick" then
+    if not b:IsA("BasePart") or b.Name ~= brickname then
         return
     end
     if not table.find(getgenv().brickcollection, b) then
@@ -4917,14 +4822,14 @@ end
     end
 end
 
-workspace.Bricks.DescendantAdded:Connect(dbc)
-workspace.Bricks.DescendantRemoving:Connect(function(b)
-    if b:IsA("BasePart") and b.Name == "Brick" then
+cfolder.DescendantAdded:Connect(dbc)
+cfolder.DescendantRemoving:Connect(function(b)
+    if b:IsA("BasePart") and b.Name == brickname then
         local idx = table.find(getgenv().brickcollection, b)
         if idx then table.remove(getgenv().brickcollection, idx) end
     end
 end)
-for i, v in pairs(workspace.Bricks:GetDescendants()) do
+for i, v in pairs(cfolder:GetDescendants()) do
     dbc(v)
 end
 
@@ -4951,7 +4856,7 @@ BuildServerGroup:AddButton({
     Text = 'Disable Delete Sound (bypass grief notifiers)',
     Func = function()
 
-        for _, desc in ipairs(workspace.Bricks:GetDescendants()) do
+        for _, desc in ipairs(cfolder:GetDescendants()) do
             if desc:IsA("Sound") then
                 desc.Volume = 0
             end
@@ -4960,7 +4865,7 @@ BuildServerGroup:AddButton({
         if _permDeleteSoundConn then
             _permDeleteSoundConn:Disconnect()
         end
-        _permDeleteSoundConn = workspace.Bricks.DescendantAdded:Connect(function(desc)
+        _permDeleteSoundConn = cfolder.DescendantAdded:Connect(function(desc)
             if desc:IsA("Sound") then
                 desc.Volume = 0
             end
@@ -4998,7 +4903,7 @@ local function doRestoreBuilding(delay)
     end
 
     local block = nil
-    local beforeamt = #workspace.Bricks[localplr.Name]:GetChildren()
+    local beforeamt = #cfolder[localplr.Name]:GetChildren()
 
     for i, v in pairs(currbc) do
         if v ~= nil then
@@ -5018,7 +4923,7 @@ local function doRestoreBuilding(delay)
 
             task.wait(delay)
 
-            if beforeamt < #workspace.Bricks[localplr.Name]:GetChildren() then
+            if beforeamt < #cfolder[localplr.Name]:GetChildren() then
                 break
             end
         else
@@ -5040,7 +4945,7 @@ local function doRestoreBuilding(delay)
     end
 
     task.wait(.1)
-    block = workspace.Bricks[localplr.Name]:FindFirstChildWhichIsA("BasePart")
+    block = cfolder[localplr.Name]:FindFirstChildWhichIsA("BasePart")
     if block then
         sendActionWebhook("Restore Building", "User used Restore Building")
         Library:Notify("Building restored successfully!", 3)
@@ -5130,7 +5035,7 @@ BuildExportGroup:AddButton({
     Text = 'Save Buildings',
     Func = function()
         local data = {}
-        for _, v in pairs(workspace.Bricks:GetDescendants()) do
+        for _, v in pairs(cfolder:GetDescendants()) do
             if v:IsA("BasePart") then table.insert(data, saveblock(v)) end
         end
         if #data == 0 then Library:Notify("No blocks on server!", 3); return end
@@ -6005,7 +5910,7 @@ function rotate(part,cframe,currentrtool)
         coroutine.wrap(function()
             equiptool("Build").Script.Event:FireServer(unpack(args))
         end)()
-        p = workspace.Bricks[localplr.Name].ChildAdded:Wait()
+        p = cfolder[localplr.Name].ChildAdded:Wait()
         p.CanCollide = false
         repeat
             gcp("hrp").CFrame = (p.CFrame + Vector3.new(0,p.Size.Y/2+2.5,0))
@@ -6099,7 +6004,7 @@ function AngleFromAxis(axis,rA)
 end
 function IsSelectable(part,hit)
     if part and localplr.Character:FindFirstChild("HumanoidRootPart") then
-        if (hit - getplrpos()).magnitude < 30 and part:IsDescendantOf(workspace.Bricks) then return true end
+        if (hit - getplrpos()).magnitude < 30 and part:IsDescendantOf(cfolder) then return true end
     end
     return false
 end
@@ -6725,13 +6630,63 @@ dsizes[Enum.NormalId.Front] = {
     "X","Y"
 }
 
-_decPanel = createToolPanel({name = "DecalToolGui", title = "Decal Tool", size = UDim2.new(0, 210, 0, 185)})
+_decPanel = createToolPanel({name = "DecalToolGui", title = "Decal Tool", size = UDim2.new(0, 225, 0, 300)})
 _decPanel.gui.Enabled = false
-decalInput = createToolInput(_decPanel.frame, 0.18, "Enter Decal ID")
-createToolButton(_decPanel.frame, "Rotate 90 Degrees", 0.36, 0.06, 0.88, function()
+
+decalInput = createToolInput(_decPanel.frame, 0.09, "Decal ID")
+
+local _decImgBg = Library:Create('Frame', {
+    AnchorPoint      = Vector2.new(0.5, 0);
+    BackgroundColor3 = Library.BackgroundColor;
+    BorderSizePixel  = 0;
+    Position         = UDim2.new(0.5, 0, 0, 50);
+    Size             = UDim2.new(0, 86, 0, 86);
+    ZIndex           = 5;
+    Parent           = _decPanel.frame;
+})
+Library:Create('UICorner', { CornerRadius = UDim.new(0, 4); Parent = _decImgBg })
+Library:AddToRegistry(_decImgBg, { BackgroundColor3 = 'BackgroundColor' })
+
+local _decImgLabel = Library:Create('ImageLabel', {
+    BackgroundTransparency = 1;
+    Size                   = UDim2.new(1, 0, 1, 0);
+    ScaleType              = Enum.ScaleType.Fit;
+    Image                  = '';
+    ZIndex                 = 6;
+    Parent                 = _decImgBg;
+})
+
+_decPreview = {}
+function _decPreview:SetImage(id)
+    if id and id ~= '' then
+        _decImgLabel.Image = 'rbxthumb://type=Asset&id=' .. tostring(id) .. '&w=420&h=420'
+    else
+        _decImgLabel.Image = ''
+    end
+end
+function _decPreview:SetVisible(vis)
+    _decImgBg.Visible = vis
+end
+_decPreview.label = _decImgLabel
+
+_rotLabel = createToolLabel(_decPanel.frame, "Rotation: 0 deg", 0.50)
+
+createToolButton(_decPanel.frame, "+90", 0.58, 0.06, 0.42, function()
     decalrotation = decalrotation + 90
+    _rotLabel.Text = "Rotation: " .. (decalrotation % 360) .. " deg"
 end)
-_decPreview = Library:CreateToolImagePreview(_decPanel.frame, 0.52)
+createToolButton(_decPanel.frame, "-90", 0.58, 0.52, 0.42, function()
+    decalrotation = decalrotation - 90
+    _rotLabel.Text = "Rotation: " .. ((decalrotation % 360 + 360) % 360) .. " deg"
+end)
+createToolButton(_decPanel.frame, "180", 0.70, 0.06, 0.42, function()
+    decalrotation = decalrotation + 180
+    _rotLabel.Text = "Rotation: " .. (decalrotation % 360) .. " deg"
+end)
+createToolButton(_decPanel.frame, "Reset", 0.70, 0.52, 0.42, function()
+    decalrotation = 0
+    _rotLabel.Text = "Rotation: 0 deg"
+end)
 
 local fakememe = Instance.new("Part")
 fakememe.CanCollide = false
@@ -6757,7 +6712,7 @@ imageindicator2.Size = UDim2.new(1,0,1,0)
 
 function updatememeifydisplays()
     _decPreview:SetImage(memeifyid)
-    imageindicator2.Image = "https://www.roblox.com/Thumbs/Asset.ashx?width=420&height=420&assetId=" .. memeifyid
+    imageindicator2.Image = 'rbxthumb://type=Asset&id=' .. memeifyid .. '&w=420&h=420'
 end
 
 decalrotation = 0
@@ -6895,9 +6850,9 @@ function createdecaltool()
                     end
                 end)()
                 task.wait(1.5)
-                sayto(nil,string.format(";width me %s",tostring(selection.Size[firstone]/6)))
+                sayto(nil,string.format(";width me %.4g", selection.Size[firstone]/6))
                 task.wait(1.5)
-                sayto(nil,string.format(";height me %s",tostring(selection.Size[secondone]/6)))
+                sayto(nil,string.format(";height me %.4g", selection.Size[secondone]/6))
                 task.wait(2.5)
                 if gcp("hrp").CollisionGroup ~= "NoClip" then
                     sayto(nil,";noclip me")
@@ -7170,187 +7125,272 @@ AdvancedGroup:AddButton({
     end
 })
 
-function createcarpettool()
-    local connections = {}
-    local cTool = Instance.new("Tool")
-    cTool.Name = "Carpet Tool"
-    cTool.ToolTip = "Click blocks to place carpet on top"
-    cTool.RequiresHandle = true
+local function sanitizename(txt)
+    if string.sub(txt,1,3):lower() == "btc" then txt = "bt" end
+    if string.sub(txt,1,3):lower() == "fat" then txt = "fa" end
+    if not isog then txt = string.gsub(txt,"_",".") end
+    return string.sub(txt,1,7)
+end
 
-    local cHandle = Instance.new("Part")
-    cHandle.Name = "Handle"
-    cHandle.Size = Vector3.new(2, 0.2, 2)
-    cHandle.Color = Color3.fromRGB(139, 90, 43)
-    cHandle.Material = Enum.Material.Fabric
-    cHandle.CanCollide = false
-    cHandle.Parent = cTool
+local giverBlocks = {R6 = {}, Carpet = {}}
+local giverTagged = {}
+local giverSelecting = false
+local giverSelMode = "R6"
+local giverMode = "R6"
+
+local function giverGetTag(uid, block)
+    return giverTagged[uid] and giverTagged[uid][block] and giverTagged[uid][block] > tick()
+end
+local function giverSetTag(uid, block, dur)
+    if not giverTagged[uid] then giverTagged[uid] = {} end
+    giverTagged[uid][block] = tick() + dur
+end
+local function giverEquipArken()
+    local arken = localplr.Backpack:FindFirstChild("The Arkenstone")
+        or (localplr.Character and localplr.Character:FindFirstChild("The Arkenstone"))
+    if arken and arken.Parent == localplr.Backpack then
+        arken.Parent = localplr.Character
+    end
+end
+
+local _giverPanel = createToolPanel({
+    name = "GiverToolGui",
+    title = "Giver Tool",
+    anchor = Vector2.new(1, 0),
+    position = UDim2.new(1, -10, 0.15, 0),
+    size = UDim2.new(0, 210, 0, 290),
+    statusText = "Equip to start"
+})
+local GiverGui = _giverPanel.gui
+local GiverInfo = _giverPanel.status
+GiverGui.Enabled = false
+
+local giverModeLabel = createToolLabel(_giverPanel.frame, "Mode: Give R6", 0.09)
+local giverCountLabel = createToolLabel(_giverPanel.frame, "R6: 0 | Carpet: 0 blocks", 0.18)
+
+local function giverUpdateUI()
+    local r6c, cc = 0, 0
+    for _ in pairs(giverBlocks.R6) do r6c = r6c + 1 end
+    for _ in pairs(giverBlocks.Carpet) do cc = cc + 1 end
+    giverModeLabel.Text = "Mode: Give " .. giverMode
+    giverCountLabel.Text = "R6: " .. r6c .. " | Carpet: " .. cc .. " block(s)"
+end
+
+createToolButton(_giverPanel.frame, "Give R6", 0.27, 0.03, 0.45, function()
+    if giverSelecting then return end
+    giverMode = "R6"
+    giverUpdateUI()
+    GiverInfo.Text = "Mode: Give R6"
+end)
+createToolButton(_giverPanel.frame, "Give Carpet", 0.27, 0.52, 0.45, function()
+    if giverSelecting then return end
+    giverMode = "Carpet"
+    giverUpdateUI()
+    GiverInfo.Text = "Mode: Give Carpet"
+end)
+
+createToolButton(_giverPanel.frame, "Select Blocks", 0.40, 0.03, 0.94, function()
+    if giverSelecting then return end
+    giverSelecting = true
+    giverSelMode = giverMode
+    for block, data in pairs(giverBlocks[giverSelMode]) do
+        data.SelectionBox.LineThickness = 0.1
+    end
+    GiverInfo.Text = "Click " .. giverSelMode .. " blocks. Finish when done."
+end)
+
+createToolButton(_giverPanel.frame, "Finish", 0.53, 0.03, 0.45, function()
+    if not giverSelecting then GiverInfo.Text = "Not in selection mode"; return end
+    giverSelecting = false
+    local mode = giverSelMode
+    local count = 0
+    local activeCol = mode == "R6" and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(139, 90, 43)
+    for block, data in pairs(giverBlocks[mode]) do
+        data.SelectionBox.LineThickness = -1
+        if not data.Active then
+            data.Active = true
+            data.SelectionBox.Color3 = activeCol
+            data.SelectionBox.SurfaceColor3 = activeCol
+            data.OnTouched = block.Touched:Connect(function(part)
+                if not giverBlocks[mode][block] then return end
+                local p = part
+                local touchPlr = nil
+                repeat
+                    touchPlr = game.Players:GetPlayerFromCharacter(p.Parent)
+                    p = p.Parent
+                until touchPlr or p == workspace or p == game
+                if not touchPlr or not touchPlr.Character then return end
+                local tHum = touchPlr.Character:FindFirstChildOfClass("Humanoid")
+                if not tHum then return end
+                local uid = touchPlr.UserId
+                if giverGetTag(uid, block) then return end
+                if mode == "R6" then
+                    if tHum.RigType == Enum.HumanoidRigType.R6 then return end
+                    giverSetTag(uid, block, 2)
+                    giverEquipArken()
+                    pcall(function()
+                        game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";r6 " .. sanitizename(touchPlr.Name))
+                    end)
+                elseif mode == "Carpet" then
+                    if tHum.RigType == Enum.HumanoidRigType.R6 then return end
+                    if touchPlr.Character:FindFirstChild("RainbowMagicCarpet") then return end
+                    giverSetTag(uid, block, 2)
+                    giverEquipArken()
+                    pcall(function()
+                        game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";carpet " .. sanitizename(touchPlr.Name))
+                    end)
+                end
+            end)
+        end
+        count = count + 1
+    end
+    GiverInfo.Text = mode .. " active: " .. count .. " block(s)"
+    giverUpdateUI()
+end)
+
+createToolButton(_giverPanel.frame, "Cancel", 0.53, 0.52, 0.45, function()
+    if not giverSelecting then return end
+    giverSelecting = false
+    for block, data in pairs(giverBlocks[giverSelMode]) do
+        if not data.Active then
+            data.SelectionBox:Destroy()
+            giverBlocks[giverSelMode][block] = nil
+        else
+            data.SelectionBox.LineThickness = -1
+        end
+    end
+    GiverInfo.Text = "Selection cancelled"
+    giverUpdateUI()
+end)
+
+createToolButton(_giverPanel.frame, "Remove Mode Blocks", 0.66, 0.03, 0.94, function()
+    for block, data in pairs(giverBlocks[giverMode]) do
+        if data.OnTouched then data.OnTouched:Disconnect() end
+        if data.SelectionBox then data.SelectionBox:Destroy() end
+    end
+    giverBlocks[giverMode] = {}
+    if giverSelecting and giverSelMode == giverMode then
+        giverSelecting = false
+    end
+    GiverInfo.Text = giverMode .. " blocks cleared"
+    giverUpdateUI()
+end)
+
+createToolButton(_giverPanel.frame, "Remove All Blocks", 0.79, 0.03, 0.94, function()
+    for mode, modeBlocks in pairs(giverBlocks) do
+        for block, data in pairs(modeBlocks) do
+            if data.OnTouched then data.OnTouched:Disconnect() end
+            if data.SelectionBox then data.SelectionBox:Destroy() end
+        end
+        giverBlocks[mode] = {}
+    end
+    giverSelecting = false
+    giverTagged = {}
+    GiverInfo.Text = "All giver blocks cleared"
+    giverUpdateUI()
+end)
+
+function creategivertool()
+    local connections = {}
+    local gTool = Instance.new("Tool")
+    gTool.Name = "Giver Tool"
+    gTool.ToolTip = "Select blocks to give R6 or Carpet on touch"
+    gTool.RequiresHandle = true
+
+    local gHandle = Instance.new("Part")
+    gHandle.Name = "Handle"
+    gHandle.Size = Vector3.new(0.8, 0.8, 2.5)
+    gHandle.Color = Color3.fromRGB(0, 200, 100)
+    gHandle.Material = Enum.Material.SmoothPlastic
+    gHandle.Reflectance = 0.2
+    gHandle.CanCollide = false
+    gHandle.Parent = gTool
 
     local equipped = false
-    local cSBox = Instance.new("SelectionBox")
-    cSBox.Color3 = Color3.fromRGB(139, 90, 43)
-    cSBox.SurfaceColor3 = Color3.fromRGB(139, 90, 43)
-    cSBox.SurfaceTransparency = 0.7
-    cSBox.LineThickness = 0.07
-    cSBox.Parent = game.CoreGui
-    table.insert(tools, {cSBox})
 
-    table.insert(connections, cTool.Equipped:Connect(function()
+    table.insert(connections, gTool.Equipped:Connect(function()
         equipped = true
+        GiverGui.Enabled = true
+        for mode, modeBlocks in pairs(giverBlocks) do
+            for block, data in pairs(modeBlocks) do
+                if data.Active then
+                    data.SelectionBox.LineThickness = 0.05
+                end
+            end
+        end
+        giverUpdateUI()
+        GiverInfo.Text = "Choose mode & select blocks"
     end))
 
-    table.insert(connections, cTool.Unequipped:Connect(function()
+    table.insert(connections, gTool.Unequipped:Connect(function()
         if not equipped then return end
         equipped = false
-        cSBox.Adornee = nil
-    end))
-
-    table.insert(connections, mouse.Button1Down:Connect(function()
-        if not equipped then return end
-        if not IsSelectable(mouse.Target, mouse.Hit.Position) then return end
-        local target = mouse.Target
-        cSBox.Adornee = target
-
-        local topPos = target.Position + Vector3.new(0, target.Size.Y / 2 + 0.1, 0)
-        local carpetPos = snap(topPos)
-
-        local et = equiptool("Build")
-        if et then
-            et.Script.Event:FireServer(
-                target,
-                Enum.NormalId.Top,
-                getplrpos(),
-                "normal"
-            )
-            task.wait(buildDelay)
-
-            local myFolder = workspace.Bricks:FindFirstChild(localplr.Name)
-            if myFolder then
-                local newest = nil
-                for _, b in ipairs(myFolder:GetChildren()) do
-                    if b:IsA("BasePart") and (not newest or b.Name == "Brick") then
-                        newest = b
-                    end
+        GiverGui.Enabled = false
+        if giverSelecting then
+            giverSelecting = false
+            for block, data in pairs(giverBlocks[giverSelMode]) do
+                if not data.Active then
+                    data.SelectionBox:Destroy()
+                    giverBlocks[giverSelMode][block] = nil
+                else
+                    data.SelectionBox.LineThickness = -1
                 end
-                if newest then
-                    local pt = localplr.Character and (localplr.Character:FindFirstChild("Paint") or localplr.Backpack:FindFirstChild("Paint"))
-                    if pt then
-                        if pt.Parent ~= localplr.Character then pt.Parent = localplr.Character; task.wait() end
-                        local ps = pt:FindFirstChild("Script")
-                        if ps and ps:FindFirstChild("Event") then
-                            ps.Event:FireServer(newest, Enum.NormalId.Top, getplrpos(), "color", Color3.fromRGB(139, 90, 43), "", "")
-                            ps.Event:FireServer(newest, Enum.NormalId.Top, getplrpos(), "material", nil, "fabric", "")
-                        end
+            end
+        else
+            for mode, modeBlocks in pairs(giverBlocks) do
+                for block, data in pairs(modeBlocks) do
+                    if data.Active and data.SelectionBox then
+                        data.SelectionBox.LineThickness = -1
                     end
                 end
             end
-            Library:Notify("Carpet placed", 2)
         end
-        cSBox.Adornee = nil
-    end))
-
-    table.insert(connections, cTool.AncestryChanged:Connect(function()
-        if not cTool or not cTool.Parent or not cTool.Parent.Parent then
-            for _, c in pairs(connections) do c:Disconnect() end
-            cSBox:Destroy()
-        end
-    end))
-
-    table.insert(tools, {cTool})
-    cTool.Parent = localplr.Backpack
-    task.wait()
-    return cTool
-end
-
-function creater6tool()
-    local connections = {}
-    local r6Tool = Instance.new("Tool")
-    r6Tool.Name = "R6 Tool"
-    r6Tool.ToolTip = "Click blocks to spawn R6 character on them"
-    r6Tool.RequiresHandle = true
-
-    local r6Handle = Instance.new("Part")
-    r6Handle.Name = "Handle"
-    r6Handle.Size = Vector3.new(0.8, 0.8, 2.5)
-    r6Handle.Color = Color3.fromRGB(255, 200, 0)
-    r6Handle.Material = Enum.Material.SmoothPlastic
-    r6Handle.Reflectance = 0.2
-    r6Handle.CanCollide = false
-    r6Handle.Parent = r6Tool
-
-    local equipped = false
-    local r6SBox = Instance.new("SelectionBox")
-    r6SBox.Color3 = Color3.fromRGB(255, 200, 0)
-    r6SBox.SurfaceColor3 = Color3.fromRGB(255, 200, 0)
-    r6SBox.SurfaceTransparency = 0.7
-    r6SBox.LineThickness = 0.07
-    r6SBox.Parent = game.CoreGui
-    table.insert(tools, {r6SBox})
-
-    table.insert(connections, r6Tool.Equipped:Connect(function()
-        equipped = true
-    end))
-
-    table.insert(connections, r6Tool.Unequipped:Connect(function()
-        if not equipped then return end
-        equipped = false
-        r6SBox.Adornee = nil
     end))
 
     table.insert(connections, mouse.Button1Down:Connect(function()
-        if not equipped then return end
-        if not IsSelectable(mouse.Target, mouse.Hit.Position) then return end
+        if not equipped or not giverSelecting then return end
         local target = mouse.Target
-        r6SBox.Adornee = target
-
-        local hrp = localplr.Character and localplr.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-
-        local topPos = target.Position + Vector3.new(0, target.Size.Y / 2 + 3, 0)
-        hrp.CFrame = CFrame.new(topPos)
-        task.wait(0.15)
-
-        local arken = localplr.Backpack:FindFirstChild("The Arkenstone")
-            or (localplr.Character and localplr.Character:FindFirstChild("The Arkenstone"))
-        if arken and arken.Parent == localplr.Backpack then
-            arken.Parent = localplr.Character
-            task.wait(0.05)
+        if not target or not target:IsDescendantOf(cfolder) then return end
+        local mode = giverSelMode
+        if giverBlocks[mode][target] then
+            local data = giverBlocks[mode][target]
+            if data.OnTouched then data.OnTouched:Disconnect() end
+            data.SelectionBox:Destroy()
+            giverBlocks[mode][target] = nil
+            GiverInfo.Text = "Block removed from " .. mode
+        else
+            local bbox = Instance.new("SelectionBox")
+            bbox.Color3 = Color3.fromRGB(0, 170, 255)
+            bbox.LineThickness = 0.1
+            bbox.SurfaceColor3 = Color3.fromRGB(13, 105, 172)
+            bbox.SurfaceTransparency = 0.7
+            bbox.Adornee = target
+            bbox.Parent = game.CoreGui
+            table.insert(tools, {bbox})
+            giverBlocks[mode][target] = {SelectionBox = bbox, Block = target, Active = false, OnTouched = nil}
+            GiverInfo.Text = "Added to " .. mode .. " (click Finish)"
         end
-
-        pcall(function()
-            game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";r6 " .. localplr.Name)
-        end)
-
-        Library:Notify("R6 spawned on block", 2)
-        task.wait(0.5)
-        r6SBox.Adornee = nil
+        giverUpdateUI()
     end))
 
-    table.insert(connections, r6Tool.AncestryChanged:Connect(function()
-        if not r6Tool or not r6Tool.Parent or not r6Tool.Parent.Parent then
+    table.insert(connections, gTool.AncestryChanged:Connect(function()
+        if not gTool or not gTool.Parent or not gTool.Parent.Parent then
             for _, c in pairs(connections) do c:Disconnect() end
-            r6SBox:Destroy()
+            GiverGui.Enabled = false
         end
     end))
 
-    table.insert(tools, {r6Tool})
-    r6Tool.Parent = localplr.Backpack
+    table.insert(tools, {gTool})
+    gTool.Parent = localplr.Backpack
     task.wait()
-    return r6Tool
+    return gTool
 end
 
 AdvancedGroup:AddButton({
-    Text = 'Carpet Tool',
+    Text = 'Giver Tool',
     Func = function()
-        createcarpettool().Parent = (plr.Character and not plr.Character:FindFirstChildWhichIsA("Tool") and plr.Character) or plr.Backpack
-        Library:Notify("Carpet tool added to backpack", 3)
-    end
-})
-
-AdvancedGroup:AddButton({
-    Text = 'R6 Tool',
-    Func = function()
-        creater6tool().Parent = (plr.Character and not plr.Character:FindFirstChildWhichIsA("Tool") and plr.Character) or plr.Backpack
-        Library:Notify("R6 tool added to backpack", 3)
+        creategivertool().Parent = (plr.Character and not plr.Character:FindFirstChildWhichIsA("Tool") and plr.Character) or plr.Backpack
+        Library:Notify("Giver tool added to backpack", 3)
     end
 })
 
