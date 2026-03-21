@@ -485,9 +485,52 @@ local function loadCached(url, cacheFile)
     return loadstring(game:HttpGet(url))()
 end
 
+pcall(function()
+    if isfile and isfile("RomazHubCache/Library.lua") then
+        local d = readfile("RomazHubCache/Library.lua")
+        if d and not d:find("CreateToolImagePreview") then
+            delfile("RomazHubCache/Library.lua")
+        end
+    end
+end)
 Library = loadCached(repo .. 'Library.lua', 'Library.lua')
 ThemeManager = loadCached(repo .. 'addons/ThemeManager.lua', 'ThemeManager.lua')
 SaveManager = loadCached(repo .. 'addons/SaveManager.lua', 'SaveManager.lua')
+
+if not Library.CreateToolImagePreview then
+    function Library:CreateToolImagePreview(parent, yPos)
+        local container = Library:Create('Frame', {
+            AnchorPoint      = Vector2.new(0.5, 0);
+            BackgroundColor3 = Library.BackgroundColor;
+            BorderSizePixel  = 0;
+            Position         = UDim2.new(0.5, 0, yPos, 0);
+            Size             = UDim2.new(0.88, 0, 0, 0);
+            ZIndex           = 5;
+            Parent           = parent;
+        })
+        Library:Create('UIAspectRatioConstraint', { AspectRatio = 1; Parent = container })
+        Library:Create('UICorner', { CornerRadius = UDim.new(0, 4); Parent = container })
+        Library:AddToRegistry(container, { BackgroundColor3 = 'BackgroundColor' })
+        local img = Library:Create('ImageLabel', {
+            BackgroundTransparency = 1;
+            Size                   = UDim2.new(1, 0, 1, 0);
+            ScaleType              = Enum.ScaleType.Fit;
+            Image                  = '';
+            ZIndex                 = 6;
+            Parent                 = container;
+        })
+        local preview = {}
+        function preview:SetImage(id)
+            img.Image = id and id ~= '' and ('rbxassetid://' .. tostring(id)) or ''
+        end
+        function preview:SetVisible(vis)
+            container.Visible = vis
+        end
+        preview.container = container
+        preview.label = img
+        return preview
+    end
+end
 
  UserInputService = game:GetService("UserInputService")
  isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
