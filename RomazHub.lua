@@ -2444,7 +2444,7 @@ local function startRelayHeartbeatLoop()
     task.spawn(function()
         sendRelayHeartbeat()
         while not Library.Unloaded do
-            task.wait(7)
+            task.wait(15)
             if not Library.Unloaded then
                 sendRelayHeartbeat()
             end
@@ -6778,6 +6778,9 @@ function createdecaltool()
             sayto(localplr,"You need enlighten to use Decal Tool!")
             return
         end
+        if not henl() then
+            eenl()
+        end
         local issel = IsSelectable(mouse.Target,mouse.Hit.Position)
         if issel and henl() then
             local selectside = mouse.TargetSurface
@@ -9035,25 +9038,25 @@ Library:SetWatermarkVisibility(true)
  FrameTimer = tick()
  FrameCounter = 0
  FPS = 60
+ping = 0
+playerCount = #Players:GetPlayers()
 
 Library:GiveSignal(RunService.RenderStepped:Connect(function()
     FrameCounter = FrameCounter + 1
-    
+
     if (tick() - FrameTimer) >= 1 then
         FPS = FrameCounter
         FrameTimer = tick()
         FrameCounter = 0
+        ping = math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue())
+        playerCount = #Players:GetPlayers()
+        Library:SetWatermark(('RomazDev Hub v2.2 | %s fps | %s ms | %d players | %s'):format(
+            math.floor(FPS),
+            ping,
+            playerCount,
+            isOwner and 'Owner 👑' or 'KEYLESS 💸'
+        ))
     end
-    
-     ping = math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue())
-     playerCount = #Players:GetPlayers()
-    
-    Library:SetWatermark(('RomazDev Hub v2.2 | %s fps | %s ms | %d players | %s'):format(
-        math.floor(FPS),
-        ping,
-        playerCount,
-        isOwner and 'Owner 👑' or 'KEYLESS 💸'
-    ))
 end))
 
 SaveManager:LoadAutoloadConfig()
