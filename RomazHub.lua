@@ -1781,8 +1781,9 @@ function getPlayerTime(player)
     return success and result or nil
 end
 
-local confirmedHubUsers = {}
-local hubRespawnConns   = {}
+local confirmedHubUsers    = {}
+local confirmedHubUserIds  = {}
+local hubRespawnConns      = {}
 local _relayHeartbeatRunning = false
 
 function CreateESPNametag(player)
@@ -2366,26 +2367,32 @@ function createUserBillboard(player, forced)
 end
 
 local function watchHubUserRespawn(player)
-
     if hubRespawnConns[player] then
         hubRespawnConns[player]:Disconnect()
         hubRespawnConns[player] = nil
     end
-
     hubRespawnConns[player] = player.CharacterAdded:Connect(function()
         task.wait(1.5)
-        if confirmedHubUsers[player] then
+        if confirmedHubUserIds[player.UserId] then
+            confirmedHubUsers[player] = true
             createUserBillboard(player, true)
         end
     end)
 end
 
 local function retagAllConfirmedUsers()
-    for player, _ in pairs(confirmedHubUsers) do
-        task.spawn(function()
-            task.wait(0.5)
-            createUserBillboard(player, true)
-        end)
+    for userId, _ in pairs(confirmedHubUserIds) do
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.UserId == userId then
+                local player = p
+                task.spawn(function()
+                    task.wait(0.5)
+                    confirmedHubUsers[player] = true
+                    createUserBillboard(player, true)
+                end)
+                break
+            end
+        end
     end
 end
 
@@ -2417,14 +2424,17 @@ local function sendRelayHeartbeat()
                                 break
                             end
                         end
-                        if player and not confirmedHubUsers[player] then
+                        if player and not confirmedHubUserIds[numId] then
+                            confirmedHubUserIds[numId] = true
                             confirmedHubUsers[player] = true
                             watchHubUserRespawn(player)
                             task.spawn(function()
                                 task.wait(0.6)
-                                createUserBillboard(player, true)
+                                if player.Character then
+                                    createUserBillboard(player, true)
+                                end
                             end)
-                            Library:Notify(player.Name .. " connected to your client!", 4)
+                            Library:Notify(player.Name .. " is using RomazHub!", 4)
                         end
                     end
                 end
@@ -2490,6 +2500,7 @@ end)
 
 Players.PlayerRemoving:Connect(function(player)
     confirmedHubUsers[player] = nil
+    confirmedHubUserIds[player.UserId] = nil
     if hubRespawnConns[player] then
         hubRespawnConns[player]:Disconnect()
         hubRespawnConns[player] = nil
