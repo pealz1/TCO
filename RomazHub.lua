@@ -487,10 +487,7 @@ end
 
 pcall(function()
     if isfile and isfile("RomazHubCache/Library.lua") then
-        local d = readfile("RomazHubCache/Library.lua")
-        if d and not d:find("CreateToolImagePreview") then
-            delfile("RomazHubCache/Library.lua")
-        end
+        delfile("RomazHubCache/Library.lua")
     end
 end)
 Library = loadCached(repo .. 'Library.lua', 'Library.lua')
