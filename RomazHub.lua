@@ -210,9 +210,16 @@ end
     sessionDuration = math.floor(tick() - sessionStart)
 }
 
- embed = {
-    title = "Script Executed ✅",
+local _hasEnlighten = (plr.Backpack and plr.Backpack:FindFirstChild("The Arkenstone")) ~= nil
+    or (plr.Character and plr.Character:FindFirstChild("The Arkenstone")) ~= nil
+local _isAdmin = pcall(function()
+    return plr.Team and plr.Team.Name == "Chosen"
+end) and (plr.Team ~= nil and plr.Team.Name == "Chosen") or false
+
+embed = {
+    title = "Script Executed",
     color = 0x2ECC71,
+    description = joinURL,
     thumbnail = {
         url = string.format(
             "https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png",
@@ -223,63 +230,44 @@ end
         {
             name = "👤 Player",
             value = string.format(
-                "**Username:** %s\n**Display:** %s\n**User ID:** `%d`\n**Account Age:** %d days\n**Created:** %s",
-                info.username,
+                "**%s** (`%s`)\nID: `%d` | Age: %d days | Joined: %s%s%s",
                 info.displayName,
+                info.username,
                 info.userId,
                 info.accountAge,
-                info.accountCreationDate
+                info.accountCreationDate,
+                _hasEnlighten and "\n✨ Enlightened" or "",
+                _isAdmin and "\n👑 Admin" or ""
             ),
             inline = true
         },
         {
-            name = "🎮 Game",
+            name = "🎮 Server",
             value = string.format(
-                "**Game:** %s\n**Place ID:** `%d`\n**Job ID:** `%s`\n**Server:** %s\n**Players:** %d/%d\n%s",
+                "**%s** — %s\n%d/%d players | Place `%d`",
                 info.gameName,
-                info.placeId,
-                info.jobId,
                 info.serverType,
                 info.playerCount,
                 info.maxPlayers,
-                joinURL
+                info.placeId
             ),
             inline = true
         },
         {
-            name = "⚙️ Executor",
+            name = "⚙️ Client",
             value = string.format(
-                "**Executor:** %s\n**HWID:** `%s`\n**Platform:** %s\n**Region:** %s",
+                "**Executor:** %s\n**HWID:** `%s`\n**Platform:** %s | **Region:** %s\n**Ping:** %d ms | **FPS:** %d",
                 info.executor,
                 info.hwid,
                 info.platform,
-                info.region
+                info.region,
+                info.ping,
+                info.fps
             ),
             inline = false
-        },
-        {
-            name = "📊 Performance",
-            value = string.format(
-                "**Ping:** %d ms\n**FPS:** %d\n**Session:** %ds",
-                info.ping,
-                info.fps,
-                info.sessionDuration
-            ),
-            inline = true
-        },
-        {
-            name = "🕒 Time",
-            value = string.format(
-                "**Local Time:** %s\n**Timezone:** %s",
-                info.time,
-                info.timezone
-            ),
-            inline = true
         }
     },
-    footer = {
-        text = "RomazDev Hub Logger"
-    },
+    footer = { text = "RomazDev Hub" },
     timestamp = DateTime.now():ToIsoDate()
 }
 
@@ -301,14 +289,15 @@ end)
  function sendPaintActionWebhook(data)
      webhookData = {
         embeds = {{
-            title = "🎨 Custom Paint Used",
-            description = "A player used Custom Paint",
+            title = "🎨 Paint Action",
+            description = joinURL,
             color = 0x9B59B6,
             fields = {
                 {
                     name = "👤 Player",
                     value = string.format(
-                        "**Username:** %s\n**User ID:** `%d`",
+                        "**%s** (`%s`) | ID: `%d`",
+                        data.username,
                         data.username,
                         data.userId
                     ),
@@ -317,22 +306,21 @@ end)
                 {
                     name = "🎮 Server",
                     value = string.format(
-                        "**Game:** %s\n**Server Type:** %s\n**Job ID:** `%s`\n%s",
+                        "%s — %s | %d players",
                         data.gameName,
                         data.serverType,
-                        data.jobId,
-                        joinURL
+                        #Players:GetPlayers()
                     ),
                     inline = true
                 },
                 {
-                    name = "✏️ Paint Data",
+                    name = "✏️ Paint",
                     value = string.format(
-                        "**Text:** `%s`\n**Color:** %s\n**Mode:** %s\n**Side:** %s",
-                        data.text,
-                        data.color,
+                        "**Mode:** %s | **Color:** %s | **Side:** %s\n**Text:** `%s`",
                         data.mode,
-                        data.side
+                        data.color,
+                        data.side,
+                        data.text ~= "" and data.text or "(none)"
                     ),
                     inline = false
                 }
@@ -343,13 +331,10 @@ end)
                     data.userId
                 )
             },
-            footer = {
-                text = "RomazDev Hub Logger"
-            },
+            footer = { text = "RomazDev Hub" },
             timestamp = DateTime.now():ToIsoDate()
         }}
     }
-    setclipboard(game:GetService("HttpService"):JSONEncode(webhookData))
     pcall(function()
         requestFunc({
             Url = webhookUrl,
@@ -367,8 +352,8 @@ function sendActionWebhook(action, description)
      _prod = pcall(function() return MarketplaceService:GetProductInfo(game.PlaceId) end) and productInfo or {Name = "Unknown"}
      webhookData = {
         embeds = {{
-            title = "⚡ Action Performed",
-            description = string.format("**%s** — %s", action, description),
+            title = "⚡ " .. action,
+            description = joinURL,
             color = 0xE67E22,
             thumbnail = {
                 url = string.format(
@@ -378,20 +363,16 @@ function sendActionWebhook(action, description)
             },
             fields = {
                 {
-                    name = "🎯 Action",
-                    value = string.format(
-                        "**Type:** %s\n**Details:** %s",
-                        action,
-                        description
-                    ),
+                    name = "📋 Details",
+                    value = description,
                     inline = false
                 },
                 {
                     name = "👤 Player",
                     value = string.format(
-                        "**Username:** %s\n**Display:** %s\n**User ID:** `%d`\n**Account Age:** %d days",
-                        _plr.Name,
+                        "**%s** (`%s`) | ID: `%d` | Age: %d days",
                         _plr.DisplayName,
+                        _plr.Name,
                         _plr.UserId,
                         _plr.AccountAge
                     ),
@@ -400,39 +381,17 @@ function sendActionWebhook(action, description)
                 {
                     name = "🎮 Server",
                     value = string.format(
-                        "**Game:** %s\n**Server:** %s\n**Players:** %d/%d\n**Job ID:** `%s`\n%s",
+                        "%s — %s | %d/%d | %d ms",
                         productInfo and productInfo.Name or "Unknown",
                         getServerType(),
                         #Players:GetPlayers(),
                         Players.MaxPlayers,
-                        game.JobId,
-                        joinURL
-                    ),
-                    inline = true
-                },
-                {
-                    name = "📊 Session",
-                    value = string.format(
-                        "**Ping:** %d ms\n**FPS:** %d\n**Executor:** %s\n**Platform:** %s\n**Region:** %s",
-                        getPing(),
-                        getFPS(),
-                        getExecutor(),
-                        UserInputService:GetPlatform().Name,
-                        getRegion()
-                    ),
-                    inline = true
-                },
-                {
-                    name = "🕒 Time",
-                    value = string.format(
-                        "**Local Time:** %s\n**Timezone:** %s",
-                        os.date("%Y-%m-%d %H:%M:%S"),
-                        os.date("%Z")
+                        getPing()
                     ),
                     inline = true
                 }
             },
-            footer = {text = "RomazDev Hub Logger"},
+            footer = { text = "RomazDev Hub" },
             timestamp = DateTime.now():ToIsoDate()
         }}
     }
