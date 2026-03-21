@@ -2512,13 +2512,17 @@ function StartDeleteAura()
         deleteAuraConnection:Disconnect()
     end
     
-    deleteAuraConnection = RunService.Heartbeat:Connect(function()
+    local _deleteAuraTimer = 0
+    deleteAuraConnection = RunService.Heartbeat:Connect(function(dt)
         if not deleteAuraEnabled or not plr.Character then return end
-        
+        _deleteAuraTimer = _deleteAuraTimer + dt
+        if _deleteAuraTimer < 0.2 then return end
+        _deleteAuraTimer = 0
+
         local character = plr.Character
         local hrp = character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
-        
+
         local parts = workspace:FindPartsInRegion3(
             Region3.new(
                 hrp.Position - Vector3.new(deleteAuraRange, 10, deleteAuraRange),
@@ -2527,14 +2531,13 @@ function StartDeleteAura()
             nil,
             math.huge
         )
-        
+
         for _, part in ipairs(parts) do
             if part:IsDescendantOf(cfolder) then
                 ExecuteDelete(part)
                 break
             end
         end
-        task.wait()
     end)
 end
 
@@ -2543,21 +2546,23 @@ function StartToxifyAura()
         toxifyAuraConnection:Disconnect()
     end
     
-    toxifyAuraConnection = RunService.Heartbeat:Connect(function()
+    local _toxifyTimer = 0
+    toxifyAuraConnection = RunService.Heartbeat:Connect(function(dt)
         if not toxifyAuraEnabled then return end
-        
+        _toxifyTimer = _toxifyTimer + dt
+        if _toxifyTimer < 1 then return end
+        _toxifyTimer = 0
+
         if not workspace:FindFirstChild("ToxifyBlock") then
             local toxifyPos = plr.Character.HumanoidRootPart.Position + Vector3.new(10000, 1000, 10000)
             ExecuteBuild(toxifyPos)
-            task.wait(0.5)
         end
-        
+
         for _, player in pairs(Players:GetPlayers()) do
             if player ~= plr and player.Character then
                 local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
                 if targetHrp and (targetHrp.Position - plr.Character.HumanoidRootPart.Position).Magnitude < 40 then
                     ExecutePaint(Enum.NormalId.Top, "", Color3.new(0, 0, 0), "toxic")
-                    task.wait()
                 end
             end
         end
@@ -2598,7 +2603,11 @@ function StartAntiBlind()
         antiConnections["Blind"]:Disconnect()
     end
     
-    antiConnections["Blind"] = RunService.Heartbeat:Connect(function()
+    local _blindT = 0
+    antiConnections["Blind"] = RunService.Heartbeat:Connect(function(dt)
+        _blindT = _blindT + dt
+        if _blindT < 0.5 then return end
+        _blindT = 0
         if playerGui:FindFirstChild("Blind") then
             playerGui.Blind.Enabled = false
         end
@@ -2789,13 +2798,16 @@ function StartAntiJail()
         antiConnections["Jail"]:Disconnect()
     end
     
-    antiConnections["Jail"] = RunService.Heartbeat:Connect(function()
+    local _jailT = 0
+    antiConnections["Jail"] = RunService.Heartbeat:Connect(function(dt)
+        _jailT = _jailT + dt
+        if _jailT < 0.5 then return end
+        _jailT = 0
         if plr.Character and plr.Character:FindFirstChild("Jail") then
             for i,v in pairs(plr.Character.Jail:GetChildren()) do
                 v.CanCollide = false
             end
         end
-        task.wait(0.5)
     end)
 end
 
@@ -2804,12 +2816,16 @@ function StartAntiFreeze()
         antiConnections["Freeze"]:Disconnect()
     end
     
-    antiConnections["Freeze"] = RunService.Heartbeat:Connect(function()
+    local _freezeT = 0
+    antiConnections["Freeze"] = RunService.Heartbeat:Connect(function(dt)
+        _freezeT = _freezeT + dt
+        if _freezeT < 0.5 then return end
+        _freezeT = 0
         if plr.Character then
             if workspace:FindFirstChild(plr.Name) and workspace[plr.Name]:FindFirstChild("Hielo") then
                 local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
-                if humanoid then 
-                    humanoid:ChangeState(Enum.HumanoidStateType.Dead) 
+                if humanoid then
+                    humanoid:ChangeState(Enum.HumanoidStateType.Dead)
                 end
             end
             if plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.HumanoidRootPart.Anchored == true then
@@ -2823,7 +2839,6 @@ function StartAntiFreeze()
                 end
             end
         end
-        task.wait(0.5)
     end)
 end
 
@@ -2832,17 +2847,15 @@ function StartAntiMyopicBlur()
         antiConnections["MyopicBlur"]:Disconnect()
     end
     
-    antiConnections["MyopicBlur"] = RunService.Heartbeat:Connect(function()
-        if game:GetService("Lighting"):FindFirstChild("BlurEffect") then
-            game:GetService("Lighting").BlurEffect.Enabled = false
-        end
-        if game:GetService("Lighting"):FindFirstChild("Blur") then
-            game:GetService("Lighting").Blur.Enabled = false
-        end
-        if game:GetService("Lighting"):FindFirstChild("DepthOfField") then
-            game:GetService("Lighting").DepthOfField.Enabled = false
-        end
-        task.wait()
+    local _myopicT = 0
+    local _lighting = game:GetService("Lighting")
+    antiConnections["MyopicBlur"] = RunService.Heartbeat:Connect(function(dt)
+        _myopicT = _myopicT + dt
+        if _myopicT < 0.5 then return end
+        _myopicT = 0
+        if _lighting:FindFirstChild("BlurEffect") then _lighting.BlurEffect.Enabled = false end
+        if _lighting:FindFirstChild("Blur") then _lighting.Blur.Enabled = false end
+        if _lighting:FindFirstChild("DepthOfField") then _lighting.DepthOfField.Enabled = false end
     end)
 end
 
@@ -2851,11 +2864,13 @@ function StartAntiFog()
         antiConnections["Fog"]:Disconnect()
     end
     
-    antiConnections["Fog"] = RunService.Heartbeat:Connect(function()
-        if game:GetService("Lighting"):FindFirstChild("Fog") then
-            game:GetService("Lighting").Fog.Density = 0
-        end
-        task.wait()
+    local _fogT = 0
+    local _fogLighting = game:GetService("Lighting")
+    antiConnections["Fog"] = RunService.Heartbeat:Connect(function(dt)
+        _fogT = _fogT + dt
+        if _fogT < 0.5 then return end
+        _fogT = 0
+        if _fogLighting:FindFirstChild("Fog") then _fogLighting.Fog.Density = 0 end
     end)
 end
 
@@ -2864,7 +2879,11 @@ function StartAntiVampire()
         antiConnections["Vampire"]:Disconnect()
     end
     
-    antiConnections["Vampire"] = RunService.Heartbeat:Connect(function()
+    local _vampireT = 0
+    antiConnections["Vampire"] = RunService.Heartbeat:Connect(function(dt)
+        _vampireT = _vampireT + dt
+        if _vampireT < 0.5 then return end
+        _vampireT = 0
         if plr.Character and plr.Character:FindFirstChild("Humanoid") and workspace.CurrentCamera then
             local camera = workspace.CurrentCamera
             local char = plr.Character
@@ -2878,7 +2897,6 @@ function StartAntiVampire()
                 camera.FieldOfView = 70
             end
         end
-        task.wait(0.5)
     end)
 end
 
@@ -2922,12 +2940,15 @@ function StartAntiInvisible()
         antiConnections["Invisible"]:Disconnect()
     end
     
-    antiConnections["Invisible"] = RunService.Heartbeat:Connect(function()
-        if plr.Character and plr.Character:FindFirstChild("Torso") and 
+    local _invisT = 0
+    antiConnections["Invisible"] = RunService.Heartbeat:Connect(function(dt)
+        _invisT = _invisT + dt
+        if _invisT < 0.5 then return end
+        _invisT = 0
+        if plr.Character and plr.Character:FindFirstChild("Torso") and
            plr.Character:FindFirstChild("Humanoid") and plr.Character.Torso.Transparency == 1 then
             askreset()
         end
-        task.wait(0.5)
     end)
 end
 
@@ -2936,11 +2957,15 @@ function StartAntiToxify()
         antiConnections["Toxify"]:Disconnect()
     end
     
-    antiConnections["Toxify"] = RunService.Heartbeat:Connect(function()
-        game:GetService("Lighting").Blur.Enabled = false
-        game:GetService("Lighting").RGB.Enabled = false
-        game:GetService("Lighting").Fog.Density = 0
-        task.wait()
+    local _toxifyAntiT = 0
+    local _toxifyLighting = game:GetService("Lighting")
+    antiConnections["Toxify"] = RunService.Heartbeat:Connect(function(dt)
+        _toxifyAntiT = _toxifyAntiT + dt
+        if _toxifyAntiT < 0.5 then return end
+        _toxifyAntiT = 0
+        _toxifyLighting.Blur.Enabled = false
+        _toxifyLighting.RGB.Enabled = false
+        _toxifyLighting.Fog.Density = 0
     end)
 end
 
@@ -2949,11 +2974,15 @@ function StartAntiNoColor()
         antiConnections["NoColor"]:Disconnect()
     end
     
-    antiConnections["NoColor"] = RunService.Heartbeat:Connect(function()
-        if game:GetService("Lighting"):FindFirstChild("ColorCorrection") then
-            game:GetService("Lighting").ColorCorrection.Enabled = false
+    local _noColorT = 0
+    local _noColorLighting = game:GetService("Lighting")
+    antiConnections["NoColor"] = RunService.Heartbeat:Connect(function(dt)
+        _noColorT = _noColorT + dt
+        if _noColorT < 0.5 then return end
+        _noColorT = 0
+        if _noColorLighting:FindFirstChild("ColorCorrection") then
+            _noColorLighting.ColorCorrection.Enabled = false
         end
-        task.wait()
     end)
 end
 
@@ -2962,12 +2991,15 @@ function StartAntiStun()
         antiConnections["Stun"]:Disconnect()
     end
     
-    antiConnections["Stun"] = RunService.Heartbeat:Connect(function()
-        if plr.Character and plr.Character:FindFirstChild("Humanoid") and 
+    local _stunT = 0
+    antiConnections["Stun"] = RunService.Heartbeat:Connect(function(dt)
+        _stunT = _stunT + dt
+        if _stunT < 0.5 then return end
+        _stunT = 0
+        if plr.Character and plr.Character:FindFirstChild("Humanoid") and
            plr.Character.Humanoid.PlatformStand == true then
             askunstun()
         end
-        task.wait(0.5)
     end)
 end
 
@@ -2976,7 +3008,11 @@ function StartAntiFarlands()
         antiConnections["Farlands"]:Disconnect()
     end
     
-    antiConnections["Farlands"] = RunService.Heartbeat:Connect(function()
+    local _farlandsT = 0
+    antiConnections["Farlands"] = RunService.Heartbeat:Connect(function(dt)
+        _farlandsT = _farlandsT + dt
+        if _farlandsT < 0.1 then return end
+        _farlandsT = 0
         if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
             local pos = plr.Character.HumanoidRootPart.Position
             if math.abs(pos.X) > 10000 or math.abs(pos.Y) > 10000 or math.abs(pos.Z) > 10000 then
@@ -2986,7 +3022,6 @@ function StartAntiFarlands()
                 breakvel()
             end
         end
-        task.wait(0.1)
     end)
 end
 
@@ -2995,14 +3030,14 @@ function StartAntiCursed()
         antiConnections["Cursed"]:Disconnect()
     end
     
-    antiConnections["Cursed"] = RunService.Heartbeat:Connect(function()
-        if game:GetService("Lighting"):FindFirstChild("RGB") then
-            game:GetService("Lighting").RGB.Enabled = false
-        end
-        if game:GetService("Lighting"):FindFirstChild("ColorCorrection") then
-            game:GetService("Lighting").ColorCorrection.Enabled = false
-        end
-        task.wait()
+    local _cursedT = 0
+    local _cursedLighting = game:GetService("Lighting")
+    antiConnections["Cursed"] = RunService.Heartbeat:Connect(function(dt)
+        _cursedT = _cursedT + dt
+        if _cursedT < 0.5 then return end
+        _cursedT = 0
+        if _cursedLighting:FindFirstChild("RGB") then _cursedLighting.RGB.Enabled = false end
+        if _cursedLighting:FindFirstChild("ColorCorrection") then _cursedLighting.ColorCorrection.Enabled = false end
     end)
 end
 
@@ -8184,7 +8219,11 @@ local FakeTimeToggle = FakeTimeGroup:AddToggle('FakeTime', {
 FakeTimeToggle:OnChanged(function()
     if fakeTimeConn then fakeTimeConn:Disconnect(); fakeTimeConn = nil end
     if FakeTimeToggle.Value then
-        fakeTimeConn = RunService.Heartbeat:Connect(function()
+        local _fakeTimeT = 0
+        fakeTimeConn = RunService.Heartbeat:Connect(function(dt)
+            _fakeTimeT = _fakeTimeT + dt
+            if _fakeTimeT < 0.5 then return end
+            _fakeTimeT = 0
             local ls = plr:FindFirstChild("leaderstats")
             if ls then
                 local tv = ls:FindFirstChild("Time")
