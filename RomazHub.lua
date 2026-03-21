@@ -32,7 +32,6 @@ TextChatService = game:GetService("TextChatService")
 MarketplaceService = game:GetService("MarketplaceService")
 CoreGui = game:GetService("CoreGui")
 
--- Boombox system variables - add these with your other variables
 boomboxNames = {
     ["SuperFlyGoldBoombox"] = true,
     ["BoomboxGearThree"] = true,
@@ -51,7 +50,6 @@ bbsbox.SurfaceTransparency = 1
 bbsbox.Transparency = 0
 bbsbox.Parent = CoreGui
 
--- Add this function with your other utility functions
  function extractSoundId(sound)
     if not sound then return "None" end
     if sound.SoundId == nil or sound.SoundId == "" then
@@ -112,8 +110,8 @@ end
 if _G.ROMAZDEV_HUB_LOADED then return end
 _G.ROMAZDEV_HUB_LOADED = true
 
- AUTOSCRIPT_URL = "https://api.jnkie.com/api/v1/luascripts/public/167fc610329ff097cfebbef417dd541f1f3c0a61ba57266c719bf8136a7e4104/download"
- payload = ("loadstring(game:HttpGet('%s'))()"):format(AUTOSCRIPT_URL)
+ AUTOURL = "https://api.jnkie.com/api/v1/luascripts/public/167fc610329ff097cfebbef417dd541f1f3c0a61ba57266c719bf8136a7e4104/download"
+ payload = ("loadstring(game:HttpGet('%s'))()"):format(AUTOURL)
 
 pcall(function()
     if syn and syn.queue_on_teleport then
@@ -142,7 +140,6 @@ sessionStart = tick()
     or http_request
     or function() return { StatusCode = 0 } end
 
--- Relay URL (encoded to prevent easy extraction)
 local _relayParts = {
     string.char(104,116,116,112,115,58,47,47),
     string.char(114,122,45,115,121,110,99,45,119,111,114,107,101,114),
@@ -195,8 +192,6 @@ end
     end)
     return ok and region or "Unknown"
 end
-
--- Discord redirect on execute
 
  productInfo = MarketplaceService:GetProductInfo(game.PlaceId)
 
@@ -375,7 +370,6 @@ end)
     end)
 end
 
--- Add this function near your other webhook functions
 function sendActionWebhook(action, description)
      _plr = game.Players.LocalPlayer
      _prod = pcall(function() return MarketplaceService:GetProductInfo(game.PlaceId) end) and productInfo or {Name = "Unknown"}
@@ -463,11 +457,37 @@ function sendActionWebhook(action, description)
     end)
 end
 
-
 repo = 'https://raw.githubusercontent.com/pealz1/LinoriaLib-Mobile/refs/heads/main/'
-Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
-ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
-SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
+
+local function loadCached(url, cacheFile)
+    pcall(makefolder, "RomazHubCache")
+    local path = "RomazHubCache/" .. cacheFile
+    local content = nil
+    pcall(function()
+        if isfile and isfile(path) then
+            local data = readfile(path)
+            if data and #data > 200 then
+                content = data
+            end
+        end
+    end)
+    if not content then
+        local ok, result = pcall(function() return game:HttpGet(url) end)
+        if ok and result then
+            content = result
+            pcall(writefile, path, content)
+        end
+    end
+    if content then
+        local ok, fn = pcall(loadstring, content)
+        if ok and fn then return fn() end
+    end
+    return loadstring(game:HttpGet(url))()
+end
+
+Library = loadCached(repo .. 'Library.lua', 'Library.lua')
+ThemeManager = loadCached(repo .. 'addons/ThemeManager.lua', 'ThemeManager.lua')
+SaveManager = loadCached(repo .. 'addons/SaveManager.lua', 'SaveManager.lua')
 
  UserInputService = game:GetService("UserInputService")
  isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
@@ -491,12 +511,12 @@ Window = Library:CreateWindow({
     Position = UDim2.fromOffset(700, 40),
 })
 
- popoutBtn = myPopout:CreateToggleButton('Servers')
+popoutBtn = myPopout:CreateToggleButton('🌐 Servers')
 
--- ── State ──
  _sbCache = {}
  _sbCards = {}
  _sbThumbCache = {}
+ _sbFetching = false
 
  _sbCurrentType = game.PlaceId == 11137575513 and "Normal"
     or game.PlaceId == 12943245078 and "XL"
@@ -504,7 +524,6 @@ Window = Library:CreateWindow({
     or game.PlaceId == 108097274488844 and "OG"
     or "Unknown"
 
--- Helper: format seconds into readable uptime
  function formatUptime(seconds)
     if not seconds or seconds <= 0 then return "new" end
      h = math.floor(seconds / 3600)
@@ -515,19 +534,12 @@ Window = Library:CreateWindow({
     return string.format("%ds", s)
 end
 
--- Helper: get player thumbnail URLs for a server
  function getServerThumbnails(serverData)
      urls = {}
     if serverData.playerTokens then
         for i = 1, math.min(3, #serverData.playerTokens) do
              token = serverData.playerTokens[i]
-            pcall(function()
-                 body = HttpService:JSONDecode(game:HttpGet(
-                    "https://thumbnails.roblox.com/v1/batch",
-                    true
-                ))
-            end)
-            -- Use token-based thumbnail API
+
              thumbUrl = ""
             pcall(function()
                  requestBody = HttpService:JSONEncode({
@@ -552,13 +564,11 @@ end
     return urls
 end
 
--- ── Server List ──
  SBListGroup = myPopout:AddGroupbox('Servers')
  _sbStatus = SBListGroup:AddLabel(_sbCurrentType .. ' servers  |  loading...')
 
 SBListGroup:AddDivider()
 
--- Pre-create reusable server cards
  _sbMaxCards = 25
 for i = 1, _sbMaxCards do
      card = SBListGroup:AddCard({
@@ -602,7 +612,6 @@ local function renderServers()
             card:SetLeftText(s.playing .. '/' .. s.maxPlayers)
             card:SetVisible(true)
 
-            -- Fetch thumbnails async
             task.spawn(function()
                 local urls = getServerThumbnails(s)
                 if #urls > 0 then
@@ -617,41 +626,53 @@ local function renderServers()
 end
 
 local function fetchServers()
-    _sbStatus:SetText('Loading servers...')
+    if _sbFetching then return end
+    _sbFetching = true
+
+    if #_sbCache == 0 then
+        _sbStatus:SetText(_sbCurrentType .. '  |  loading...')
+    end
     task.spawn(function()
         local ok, result = pcall(function()
-            return HttpService:JSONDecode(
-                game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
-            )
+            local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+            local resp = requestFunc({Url = url, Method = "GET"})
+            if not resp or resp.StatusCode ~= 200 then
+                resp = {Body = game:HttpGet(url, true)}
+            end
+            return HttpService:JSONDecode(resp.Body)
         end)
         if ok and result and result.data and #result.data > 0 then
             _sbCache = result.data
             renderServers()
         else
             local ok2, result2 = pcall(function()
-                return HttpService:JSONDecode(
-                    game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=10")
-                )
+                local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=10"
+                local resp = requestFunc({Url = url, Method = "GET"})
+                if not resp or resp.StatusCode ~= 200 then
+                    resp = {Body = game:HttpGet(url, true)}
+                end
+                return HttpService:JSONDecode(resp.Body)
             end)
             if ok2 and result2 and result2.data and #result2.data > 0 then
                 _sbCache = result2.data
                 renderServers()
             else
-                _sbStatus:SetText('Could not load servers - try again')
-                _sbCache = {}
-                renderServers()
+
+                if #_sbCache == 0 then
+                    _sbStatus:SetText('Could not load servers - try again')
+                    renderServers()
+                else
+                    _sbStatus:SetText(_sbCurrentType .. '  |  ' .. #_sbCache .. ' servers')
+                end
             end
         end
+        _sbFetching = false
     end)
 end
 
--- ── Controls ──
 local SBControlGroup = myPopout:AddGroupbox('Controls')
 
-SBControlGroup:AddButton({
-    Text = 'Refresh Servers',
-    Func = fetchServers
-}):AddButton({Text = 'Join Random', Func = function()
+SBControlGroup:AddButton({Text = 'Join Random', Func = function()
     Library:Notify('Joining random server...', 3)
     TeleportService:Teleport(game.PlaceId)
 end})
@@ -671,6 +692,16 @@ SBControlGroup:AddButton({
         Library:Notify('Join link copied!', 2)
     end
 end})
+
+task.spawn(fetchServers)
+task.spawn(function()
+    while not Library.Unloaded do
+        task.wait(18)
+        if not Library.Unloaded then
+            fetchServers()
+        end
+    end
+end)
 
 ToggleBtn = Library:CreateToggleButton('RomazDev Hub')
  _mainFrame = nil
@@ -772,7 +803,7 @@ antiVoidConnection = nil
 originalHumanoidDesc = nil
 originalDisplayName = plr.DisplayName
 originalDestroyHeight = workspace.FallenPartsDestroyHeight
--- Enhanced Block System
+
 function round(pos, m)
     m = m or gridSize
     return Vector3.new(
@@ -786,7 +817,6 @@ function snap(pos)
     return round(pos)
 end
 
--- Working paint and delete functions
 function ExecutePaint(face, text, color, mode)
     local character = plr.Character
     if not character then return false end
@@ -865,27 +895,26 @@ local autoPingOptimize = true
 local currentPing = 0
 local safeModeActive = false
 
--- Ping monitor: adjusts buildDelay automatically based on network latency
 task.spawn(function()
     while not Library.Unloaded do
         pcall(function()
-            currentPing = game.Players.LocalPlayer:GetNetworkPing() * 1000 -- ms
+            currentPing = game.Players.LocalPlayer:GetNetworkPing() * 1000
         end)
         if autoPingOptimize then
             if currentPing > 400 then
-                -- Very bad ping: use large delays
+
                 buildDelay = 0.5
                 safeModeActive = true
             elseif currentPing > 250 then
-                -- Bad ping: moderate delays
+
                 buildDelay = 0.35
                 safeModeActive = true
             elseif currentPing > 150 then
-                -- Mediocre ping: slightly increased delays
+
                 buildDelay = 0.25
                 safeModeActive = false
             else
-                -- Good ping: use ping-based delay
+
                 buildDelay = math.max(currentPing / 1000 + 0.007, 0.051)
                 safeModeActive = false
             end
@@ -934,7 +963,6 @@ function ExecuteSign(position)
     return false
 end
 
--- Enhanced color system
 colors = {
     {name = "Red", color = Color3.new(1, 0, 0)},
     {name = "Green", color = Color3.new(0, 1, 0)},
@@ -951,7 +979,6 @@ for _, colorData in ipairs(colors) do
     table.insert(colorNames, colorData.name)
 end
 
--- Enhanced player targeting system
 function GetPlayerFromString(name)
     name = name:lower()
     if name == "all" then
@@ -990,11 +1017,9 @@ end
 OWNER_COMMANDS_ENABLED = true
 commandPrefix = "."
 
--- Owner commands handler
 function handleOwnerCommand(sender, message)
     if not OWNER_COMMANDS_ENABLED then return end
 
-    -- Determine sender authority
     local senderIsOwner = false
     local senderIsBuyer = false
     for _, id in ipairs(OWNER_ID) do
@@ -1012,7 +1037,6 @@ function handleOwnerCommand(sender, message)
     local args = string.split(string.sub(message, 2), " ")
     local command = string.lower(args[1])
 
-    -- Commands that only execute on the SENDER's own client
     if plr == sender then
         if command == "see" then
             PlayersESPToggle:SetValue(not PlayersESPToggle.Value)
@@ -1078,8 +1102,6 @@ function handleOwnerCommand(sender, message)
     return
 end
 
-    -- Beyond this point we are deciding whether the LOCAL client should execute
-    -- the command on THEMSELVES. Owners and buyers are immune.
     local localIsOwner = false
     local localIsBuyer = false
     for _, id in ipairs(OWNER_ID) do
@@ -1092,7 +1114,6 @@ end
     end
     if localIsOwner or localIsBuyer then return end
 
-    -- Check whether the local player is the intended target
     local function isLocalTargeted(targetStr)
         if not targetStr then return false end
         targetStr = targetStr:lower()
@@ -1311,8 +1332,6 @@ end
     end
 end
 
--- Hook commands via OnIncomingMessage (fires for ALL players, not just local)
--- Dedup guard: same sender+message within 0.5s = ignore second fire
  _cmdLastFired = {}
  function fireCommand(sender, message)
      key = tostring(sender.UserId) .. message
@@ -1322,21 +1341,18 @@ end
     handleOwnerCommand(sender, message)
 end
 
--- Hook all current players
 for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
     player.Chatted:Connect(function(message)
         fireCommand(player, message)
     end)
 end
 
--- Hook players who join after script loads
 game:GetService("Players").PlayerAdded:Connect(function(player)
     player.Chatted:Connect(function(message)
         fireCommand(player, message)
     end)
 end)
 
--- TextChatService fallback (local player's own messages may not fire Chatted)
 pcall(function()
     game:GetService("TextChatService").TextChannels.RBXGeneral.MessageReceived:Connect(function(msg)
         if not msg.TextSource then return end
@@ -1347,7 +1363,6 @@ pcall(function()
     end)
 end)
 
--- Whisper channel command support: hook all existing and future whisper channels
 pcall(function()
     local tcs = game:GetService("TextChatService")
     local function hookWhisperChannel(channel)
@@ -1402,7 +1417,6 @@ function FindTools(toolName)
     return tools
 end
 
--- Fixed TCO Aura System
 auraConnections = {}
  auraSettings = {
     griefAura = {active = false, target = "me", range = 100, speed = 100},
@@ -1414,8 +1428,6 @@ auraConnections = {}
     unanchorAura = {active = false, target = "me", range = 100, speed = 100}
 }
 
--- Completely fixed aura system
--- Aura system — dt accumulator (no task.wait inside Heartbeat)
  _auraDt = {}
 function StartAura(auraType)
     if auraConnections[auraType] then
@@ -1485,7 +1497,7 @@ function StartAura(auraType)
                                 if painted >= 5 then break end
                             end
                         end
-                        -- Rainbow terrain: paint non-brick parts (terrain, baseplate, etc.)
+
                         if auraSettings.rainbowAura.terrain then
                             local tPainted = 0
                             for _, blk in ipairs(nearby) do
@@ -1567,9 +1579,6 @@ function StartAura(auraType)
     end)
 end
 
--- New Feature: Fly System (Fixed)
-
--- New Feature: Fly System (Fixed)
 function StartFlying()
     if flyConnection then
         flyConnection:Disconnect()
@@ -1647,7 +1656,6 @@ function StopFlying()
     end
 end
 
--- New Feature: Grab Tools Function
 function GrabTools()
      tools = {"Paint", "Delete", "Build", "Sign"}
      toolsFound = 0
@@ -1677,7 +1685,7 @@ end
     Cyan   = Color3.new(0,1,1),
     Orange = Color3.new(1,0.5,0),
     Pink   = Color3.new(1,0.4,0.8),
-    Rainbow = Color3.new(1,0,0) -- updated each frame
+    Rainbow = Color3.new(1,0,0)
 }
 
  function getCurrentESPColor()
@@ -1732,11 +1740,10 @@ end
     if player == plr then return false end
     if espTrackedPlayer == "all" then return true end
     if espTrackedPlayer == "others" then return player ~= plr end
-    -- specific name match
+
     return player.Name:lower():find(espTrackedPlayer:lower()) ~= nil
 end
 
--- Player ESP
 function CreateESP(player)
     RemoveESP(player)
      character = player.Character
@@ -1745,7 +1752,6 @@ function CreateESP(player)
      color = getCurrentESPColor()
      transp = getESPTransparency()
 
-    -- Highlight
      hl = Instance.new("Highlight")
     hl.Name = "RomazESP"
     hl.Adornee = character
@@ -1757,7 +1763,6 @@ function CreateESP(player)
     hl.Parent = playerGui
     espObjects[player] = hl
 
-    -- Nametag billboard
     if espNametags then
         CreateESPNametag(player)
     end
@@ -1790,6 +1795,10 @@ function getPlayerTime(player)
     return success and result or nil
 end
 
+local confirmedHubUsers = {}
+local hubRespawnConns   = {}
+local _relayHeartbeatRunning = false
+
 function CreateESPNametag(player)
     RemoveESPNametag(player)
     local character = player.Character
@@ -1800,15 +1809,20 @@ function CreateESPNametag(player)
     local espColor = getCurrentESPColor()
     local hasEnlighten = getPlayerEnlighten(player)
     local isAdmin = getPlayerAdmin(player)
-    local timeVal = getPlayerTime(player)
+    local hasBadges = hasEnlighten or isAdmin or confirmedHubUsers[player]
+
+    local bbH = hasBadges and 88 or 72
+    local infoY  = hasBadges and 60 or 44
+    local statsY = hasBadges and 73 or 57
+    local sepY   = hasBadges and 55 or 39
 
     local bb = Instance.new("BillboardGui")
     bb.Name = "RomazESPTag"
-    bb.Size = UDim2.new(0, 180, 0, 72)
-    bb.StudsOffset = Vector3.new(0, 3.2, 0)
-    bb.AlwaysOnTop = espXrayEnabled
+    bb.Size = UDim2.new(0, 200, 0, bbH)
+    bb.StudsOffset = Vector3.new(0, 3.4, 0)
+    bb.AlwaysOnTop = false
     bb.ResetOnSpawn = false
-    bb.MaxDistance = 500
+    bb.MaxDistance = 1000
     bb.ClipsDescendants = true
     bb.Parent = head
 
@@ -1838,13 +1852,13 @@ function CreateESPNametag(player)
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Name = "NameLabel"
     nameLabel.BackgroundTransparency = 1
-    nameLabel.Position = UDim2.new(0, 6, 0, 4)
-    nameLabel.Size = UDim2.new(1, -12, 0, 16)
+    nameLabel.Position = UDim2.new(0, 8, 0, 6)
+    nameLabel.Size = UDim2.new(1, -16, 0, 18)
     nameLabel.Font = Enum.Font.GothamBold
     nameLabel.TextScaled = true
-    nameLabel.TextStrokeTransparency = 0.2
+    nameLabel.TextStrokeTransparency = 0.3
     nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    nameLabel.TextColor3 = espColor
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     nameLabel.TextXAlignment = Enum.TextXAlignment.Left
     nameLabel.Text = player.DisplayName
     nameLabel.Parent = card
@@ -1852,97 +1866,76 @@ function CreateESPNametag(player)
     local userLabel = Instance.new("TextLabel")
     userLabel.Name = "UserLabel"
     userLabel.BackgroundTransparency = 1
-    userLabel.Position = UDim2.new(0, 6, 0, 20)
-    userLabel.Size = UDim2.new(1, -12, 0, 12)
+    userLabel.Position = UDim2.new(0, 8, 0, 25)
+    userLabel.Size = UDim2.new(1, -16, 0, 12)
     userLabel.Font = Enum.Font.Gotham
     userLabel.TextScaled = true
-    userLabel.TextStrokeTransparency = 0.4
+    userLabel.TextStrokeTransparency = 0.5
     userLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     userLabel.TextColor3 = Color3.fromRGB(160, 160, 170)
     userLabel.TextXAlignment = Enum.TextXAlignment.Left
     userLabel.Text = "@" .. player.Name
     userLabel.Parent = card
 
-    local badgeRow = Instance.new("Frame")
-    badgeRow.Name = "Badges"
-    badgeRow.BackgroundTransparency = 1
-    badgeRow.Position = UDim2.new(0, 4, 0, 34)
-    badgeRow.Size = UDim2.new(1, -8, 0, 14)
-    badgeRow.Parent = card
+    if hasBadges then
+        local badgeRow = Instance.new("Frame")
+        badgeRow.Name = "Badges"
+        badgeRow.BackgroundTransparency = 1
+        badgeRow.Position = UDim2.new(0, 6, 0, 39)
+        badgeRow.Size = UDim2.new(1, -12, 0, 14)
+        badgeRow.Parent = card
 
-    local badgeLayout = Instance.new("UIListLayout")
-    badgeLayout.FillDirection = Enum.FillDirection.Horizontal
-    badgeLayout.Padding = UDim.new(0, 4)
-    badgeLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    badgeLayout.Parent = badgeRow
+        local badgeLayout = Instance.new("UIListLayout")
+        badgeLayout.FillDirection = Enum.FillDirection.Horizontal
+        badgeLayout.Padding = UDim.new(0, 4)
+        badgeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        badgeLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        badgeLayout.Parent = badgeRow
 
-    if hasEnlighten then
-        local eBadge = Instance.new("Frame")
-        eBadge.Size = UDim2.new(0, 62, 1, 0)
-        eBadge.BackgroundColor3 = Color3.fromRGB(255, 185, 0)
-        eBadge.BackgroundTransparency = 0.15
-        eBadge.BorderSizePixel = 0
-        eBadge.LayoutOrder = 1
-        eBadge.Parent = badgeRow
-        Instance.new("UICorner", eBadge).CornerRadius = UDim.new(1, 0)
-        local eLbl = Instance.new("TextLabel")
-        eLbl.BackgroundTransparency = 1
-        eLbl.Size = UDim2.new(1, 0, 1, 0)
-        eLbl.Font = Enum.Font.GothamBold
-        eLbl.TextScaled = true
-        eLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-        eLbl.Text = "ENLIGHTEN"
-        eLbl.Parent = eBadge
+        local function makeBadge(text, color, order, width)
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, width, 1, 0)
+            f.BackgroundColor3 = color
+            f.BackgroundTransparency = 0.15
+            f.BorderSizePixel = 0
+            f.LayoutOrder = order
+            f.Parent = badgeRow
+            Instance.new("UICorner", f).CornerRadius = UDim.new(1, 0)
+            local lbl = Instance.new("TextLabel")
+            lbl.BackgroundTransparency = 1
+            lbl.Size = UDim2.new(1, 0, 1, 0)
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextScaled = true
+            lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+            lbl.TextStrokeTransparency = 0.4
+            lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            lbl.Text = text
+            lbl.Parent = f
+        end
+
+        if hasEnlighten        then makeBadge("ENLIGHTEN", Color3.fromRGB(255, 185, 0),  1, 68) end
+        if isAdmin              then makeBadge("ADMIN",     Color3.fromRGB(210, 45,  45), 2, 46) end
+        if confirmedHubUsers[player] then makeBadge("HUB", Color3.fromRGB(0,   85,  255), 3, 36) end
     end
 
-    if isAdmin then
-        local aBadge = Instance.new("Frame")
-        aBadge.Size = UDim2.new(0, 44, 1, 0)
-        aBadge.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-        aBadge.BackgroundTransparency = 0.15
-        aBadge.BorderSizePixel = 0
-        aBadge.LayoutOrder = 2
-        aBadge.Parent = badgeRow
-        Instance.new("UICorner", aBadge).CornerRadius = UDim.new(1, 0)
-        local aLbl = Instance.new("TextLabel")
-        aLbl.BackgroundTransparency = 1
-        aLbl.Size = UDim2.new(1, 0, 1, 0)
-        aLbl.Font = Enum.Font.GothamBold
-        aLbl.TextScaled = true
-        aLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-        aLbl.Text = "ADMIN"
-        aLbl.Parent = aBadge
-    end
-
-    if confirmedHubUsers[player] then
-        local hBadge = Instance.new("Frame")
-        hBadge.Size = UDim2.new(0, 34, 1, 0)
-        hBadge.BackgroundColor3 = Color3.fromRGB(0, 85, 255)
-        hBadge.BackgroundTransparency = 0.15
-        hBadge.BorderSizePixel = 0
-        hBadge.LayoutOrder = 3
-        hBadge.Parent = badgeRow
-        Instance.new("UICorner", hBadge).CornerRadius = UDim.new(1, 0)
-        local hLbl = Instance.new("TextLabel")
-        hLbl.BackgroundTransparency = 1
-        hLbl.Size = UDim2.new(1, 0, 1, 0)
-        hLbl.Font = Enum.Font.GothamBold
-        hLbl.TextScaled = true
-        hLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-        hLbl.Text = "HUB"
-        hLbl.Parent = hBadge
-    end
+    local sep = Instance.new("Frame")
+    sep.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+    sep.BackgroundTransparency = 0.3
+    sep.BorderSizePixel = 0
+    sep.Position = UDim2.new(0.04, 0, 0, sepY)
+    sep.Size = UDim2.new(0.92, 0, 0, 1)
+    sep.Parent = card
 
     local infoLabel = Instance.new("TextLabel")
     infoLabel.Name = "InfoLabel"
     infoLabel.BackgroundTransparency = 1
-    infoLabel.Position = UDim2.new(0, 6, 0, 50)
-    infoLabel.Size = UDim2.new(1, -12, 0, 12)
+    infoLabel.Position = UDim2.new(0, 8, 0, infoY)
+    infoLabel.Size = UDim2.new(1, -16, 0, 12)
     infoLabel.Font = Enum.Font.Gotham
     infoLabel.TextScaled = true
-    infoLabel.TextStrokeTransparency = 0.4
+    infoLabel.TextStrokeTransparency = 0.5
     infoLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    infoLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    infoLabel.TextColor3 = Color3.fromRGB(160, 160, 170)
     infoLabel.TextXAlignment = Enum.TextXAlignment.Left
     infoLabel.Text = "..."
     infoLabel.Parent = card
@@ -1950,11 +1943,11 @@ function CreateESPNametag(player)
     local statsLabel = Instance.new("TextLabel")
     statsLabel.Name = "StatsLabel"
     statsLabel.BackgroundTransparency = 1
-    statsLabel.Position = UDim2.new(0, 6, 0, 64)
-    statsLabel.Size = UDim2.new(1, -12, 0, 12)
+    statsLabel.Position = UDim2.new(0, 8, 0, statsY)
+    statsLabel.Size = UDim2.new(1, -16, 0, 11)
     statsLabel.Font = Enum.Font.Gotham
     statsLabel.TextScaled = true
-    statsLabel.TextStrokeTransparency = 0.4
+    statsLabel.TextStrokeTransparency = 0.5
     statsLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     statsLabel.TextColor3 = espColor
     statsLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -1966,8 +1959,8 @@ function CreateESPNametag(player)
     bottomLine.BackgroundTransparency = 0.6
     bottomLine.BorderSizePixel = 0
     bottomLine.AnchorPoint = Vector2.new(0, 1)
-    bottomLine.Position = UDim2.new(0.05, 0, 1, -2)
-    bottomLine.Size = UDim2.new(0.9, 0, 0, 1)
+    bottomLine.Position = UDim2.new(0.04, 0, 1, -2)
+    bottomLine.Size = UDim2.new(0.92, 0, 0, 1)
     bottomLine.Parent = card
 
     espNameLabels[player] = {bb = bb, nameLabel = nameLabel, infoLabel = infoLabel, statsLabel = statsLabel, accent = accentBar, bottomLine = bottomLine}
@@ -1990,17 +1983,14 @@ function RemoveESPNametag(player)
     end
 end
 
--- Building ESP per player
 function CreateBuildESP(player)
     RemoveBuildESP(player)
      folder = workspace.Bricks:FindFirstChild(player.Name)
     if not folder then return end
-    if #folder:GetChildren() == 0 then return end   -- nothing to show yet
+    if #folder:GetChildren() == 0 then return end
 
      color = getCurrentESPColor()
 
-    -- Highlight adorns a Folder and illuminates every BasePart descendant.
-    -- SelectionBox on a Folder produces no visuals — that was the root bug.
      hl = Instance.new("Highlight")
     hl.Name            = "RomazBuildESP"
     hl.FillColor       = color
@@ -2014,7 +2004,6 @@ function CreateBuildESP(player)
     hl.Parent          = playerGui
     espBuildObjects[player] = hl
 
-    -- BillboardGui anchored to a tiny invisible Part at the build's centre
     local center = getPlayerBuildCenter(player)
     if center then
         local marker = Instance.new("Part")
@@ -2087,7 +2076,6 @@ function RemoveBuildESP(player)
     end
 end
 
-
 function RemoveAllBuildESP()
     for player, _ in pairs(espBuildObjects) do
         RemoveBuildESP(player)
@@ -2109,7 +2097,6 @@ function getplrpos(p)
     return Vector3.new(0, 100, 0)
 end
 
--- Main update loop (runs every 0.25s when any ESP active)
 function StartESPUpdateLoop()
     if espUpdateConnection then espUpdateConnection:Disconnect() end
     local t = 0
@@ -2121,7 +2108,6 @@ function StartESPUpdateLoop()
         local ok, err = pcall(function()
         local color = getCurrentESPColor()
 
-        -- ── Player ESP ───────────────────────────────────────────
         local toRemove = {}
         for player, hl in pairs(espObjects) do
             if not player or not player.Parent then
@@ -2142,9 +2128,6 @@ function StartESPUpdateLoop()
 
                 if espNameLabels[player] then
                     local tags = espNameLabels[player]
-                    if tags.nameLabel and tags.nameLabel.Parent then
-                        tags.nameLabel.TextColor3 = color
-                    end
                     if tags.accent and tags.accent.Parent then tags.accent.BackgroundColor3 = color end
                     if tags.bottomLine and tags.bottomLine.Parent then tags.bottomLine.BackgroundColor3 = color end
                     local dist       = getDistance(player)
@@ -2182,7 +2165,14 @@ function StartESPUpdateLoop()
         end
         for _, p in ipairs(toRemove) do RemoveESP(p) end
 
-        -- ── Build ESP ─────────────────────────────────────────────
+        if PlayersESPToggle.Value then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if shouldESPPlayer(p) and not espObjects[p] and p.Character then
+                    CreateESP(p)
+                end
+            end
+        end
+
         local buildToRemove = {}
         for player, hl in pairs(espBuildLabels) do
             if not player or not player.Parent then
@@ -2219,8 +2209,6 @@ function StopESPUpdateLoop()
     end
 end
 
--- Owner billboard visible to everyone in server
-
 function createStyledBillboard(player, config)
     if not player or not player.Character then return end
     local head = player.Character:FindFirstChild("Head")
@@ -2229,15 +2217,14 @@ function createStyledBillboard(player, config)
 
     local bb = Instance.new("BillboardGui")
     bb.Name = config.bbName
-    bb.Size = UDim2.new(0, 170, 0, 56)
-    bb.StudsOffset = Vector3.new(0, 3.8, 0)
-    bb.AlwaysOnTop = true
-    bb.ResetOnSpawn = false
-    bb.MaxDistance = 300
-    bb.ClipsDescendants = true
+bb.Size = UDim2.new(0, 175, 0, 70)
+bb.StudsOffset = Vector3.new(0, 3.2, 0)
+bb.AlwaysOnTop = true
+bb.ResetOnSpawn = false
+bb.MaxDistance = 0
+bb.ClipsDescendants = true
     bb.Parent = head
 
-    -- Main card frame (matches RomazHub dark panel)
     local card = Instance.new("Frame")
     card.Name = "Card"
     card.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
@@ -2247,14 +2234,12 @@ function createStyledBillboard(player, config)
     card.Parent = bb
     Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
 
-    -- Outline stroke (matches OutlineColor)
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(50, 50, 50)
     stroke.Thickness = 1.2
     stroke.Transparency = 0.2
     stroke.Parent = card
 
-    -- Top accent bar (matches AccentColor style)
     local accent = Instance.new("Frame")
     accent.Name = "Accent"
     accent.BackgroundColor3 = config.accentColor
@@ -2263,14 +2248,12 @@ function createStyledBillboard(player, config)
     accent.Parent = card
     Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 6)
 
-    -- Role badge row
     local badgeRow = Instance.new("Frame")
     badgeRow.BackgroundTransparency = 1
     badgeRow.Position = UDim2.new(0, 0, 0, 4)
     badgeRow.Size = UDim2.new(1, 0, 0, 18)
     badgeRow.Parent = card
 
-    -- Role badge (colored pill)
     local badge = Instance.new("Frame")
     badge.AnchorPoint = Vector2.new(0.5, 0)
     badge.Position = UDim2.new(0.5, 0, 0, 0)
@@ -2292,7 +2275,6 @@ function createStyledBillboard(player, config)
     badgeLabel.Text = config.roleText
     badgeLabel.Parent = badge
 
-    -- Display name
     local displayLabel = Instance.new("TextLabel")
     displayLabel.BackgroundTransparency = 1
     displayLabel.Position = UDim2.new(0, 6, 0, 23)
@@ -2305,7 +2287,6 @@ function createStyledBillboard(player, config)
     displayLabel.Text = player.DisplayName
     displayLabel.Parent = card
 
-    -- Username + info line
     local infoLabel = Instance.new("TextLabel")
     infoLabel.Name = "InfoLabel"
     infoLabel.BackgroundTransparency = 1
@@ -2319,7 +2300,6 @@ function createStyledBillboard(player, config)
     infoLabel.Text = "@" .. player.Name .. "  |  " .. player.AccountAge .. "d"
     infoLabel.Parent = card
 
-    -- Extra info line (executor for self, distance for others)
     local extraLabel = Instance.new("TextLabel")
     extraLabel.Name = "ExtraLabel"
     extraLabel.BackgroundTransparency = 1
@@ -2333,7 +2313,6 @@ function createStyledBillboard(player, config)
     extraLabel.Text = config.extraText or ""
     extraLabel.Parent = card
 
-    -- Bottom accent line
     local bottomLine = Instance.new("Frame")
     bottomLine.BackgroundColor3 = config.accentColor
     bottomLine.BackgroundTransparency = 0.6
@@ -2345,7 +2324,7 @@ function createStyledBillboard(player, config)
 end
 
 function createBuyerBillboard(player)
-    -- Don't add BUYER tag to owners (they already have OWNER tag)
+
     for _, id in ipairs(OWNER_ID) do
         if player.UserId == id then return end
     end
@@ -2382,15 +2361,9 @@ function hookBuyerBillboards()
 end
 hookBuyerBillboards()
 
-local confirmedHubUsers = {}              -- [Player] = true
-local hubRespawnConns   = {}              -- [Player] = RBXScriptConnection  (prevent duplicate connections)
-local _relayHeartbeatRunning = false      -- guard so heartbeat loop only runs once
-
--- ── Creates the grey USER tag above a player's head (no BoolValue needed) ──
 function createUserBillboard(player, forced)
     if not player or not player.Character then return end
 
-    -- Owners already have OWNER, buyers already have PREMIUM — skip both
     for _, id in ipairs(OWNER_ID) do
         if player.UserId == id then return end
     end
@@ -2406,10 +2379,8 @@ function createUserBillboard(player, forced)
     })
 end
 
--- ── Re-tag a confirmed user after every one of THEIR respawns ──
--- Uses hubRespawnConns table to guarantee exactly one connection per player.
 local function watchHubUserRespawn(player)
-    -- Disconnect any previous connection for this player before making a new one
+
     if hubRespawnConns[player] then
         hubRespawnConns[player]:Disconnect()
         hubRespawnConns[player] = nil
@@ -2423,7 +2394,6 @@ local function watchHubUserRespawn(player)
     end)
 end
 
--- ── Re-tag ALL confirmed hub users on OUR character (used after our respawn) ──
 local function retagAllConfirmedUsers()
     for player, _ in pairs(confirmedHubUsers) do
         task.spawn(function()
@@ -2434,10 +2404,10 @@ local function retagAllConfirmedUsers()
 end
 
 local function sendRelayHeartbeat()
-    local ok, result = pcall(function()
+    pcall(function()
         local body = HttpService:JSONEncode({
-            jobId  = game.JobId,
-            userId = plr.UserId,
+            jobId   = game.JobId,
+            userId  = plr.UserId,
             placeId = game.PlaceId,
         })
         local resp = requestFunc({
@@ -2446,14 +2416,17 @@ local function sendRelayHeartbeat()
             Headers = { ["Content-Type"] = "application/json" },
             Body    = body,
         })
-        if resp.StatusCode == 200 then
-            local data = HttpService:JSONDecode(resp.Body)
+        local statusCode = resp.StatusCode or resp.status_code or 0
+        local respBody   = resp.Body or resp.body or ""
+        if statusCode == 200 and respBody ~= "" then
+            local data = HttpService:JSONDecode(respBody)
             if data and data.users then
                 for _, uid in ipairs(data.users) do
-                    if uid ~= plr.UserId then
+                    local numId = tonumber(uid)
+                    if numId and numId ~= plr.UserId then
                         local player = nil
                         for _, p in ipairs(Players:GetPlayers()) do
-                            if p.UserId == uid then
+                            if p.UserId == numId then
                                 player = p
                                 break
                             end
@@ -2505,35 +2478,30 @@ function equiptool(toolname)
         rt = localplr.Backpack:FindFirstChild(toolname)
         rt.Parent = localplr.Character
     end
-    --[[if rt then
-        task.wait()
-        rt.Parent = localplr.Backpack
-        if lt then
-            lt.Parent = localplr.Character
-        end
-    end]]
+    
     return rt
 end
--- ── Relay-based heartbeat loop: pings the relay every 20s to discover other hub users ──
+
 local function startRelayHeartbeatLoop()
     if _relayHeartbeatRunning then return end
     _relayHeartbeatRunning = true
 
     task.spawn(function()
+        sendRelayHeartbeat()
         while not Library.Unloaded do
-            sendRelayHeartbeat()
-            task.wait(20)
+            task.wait(7)
+            if not Library.Unloaded then
+                sendRelayHeartbeat()
+            end
         end
     end)
 end
 
--- ── When a new player joins, send a heartbeat so they show up faster ──
 Players.PlayerAdded:Connect(function()
     task.wait(4)
     task.spawn(sendRelayHeartbeat)
 end)
 
--- ── Clean up when a player leaves ──
 Players.PlayerRemoving:Connect(function(player)
     confirmedHubUsers[player] = nil
     if hubRespawnConns[player] then
@@ -2542,9 +2510,6 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
--- ── After OUR OWN respawn: re-tag all confirmed users ──
--- Without retagAllConfirmedUsers(), the USER tags on other players disappear
--- after we respawn (their billboard lived on our old character's Head).
 plr.CharacterAdded:Connect(function(newChar)
     task.wait(1)
     retagAllConfirmedUsers()
@@ -2554,15 +2519,51 @@ plr.CharacterAdded:Connect(function(newChar)
     end)
 end)
 
--- ── Kick everything off shortly after execute ──
 task.spawn(function()
-    task.wait(1.5)           -- wait for our own character + Library to fully load
+    task.wait(0.5)
     startRelayHeartbeatLoop()
 end)
 
--- hookUserBillboards is fully replaced by the system above.
--- Keep an empty stub so any remaining call in the script doesn't error.
-function hookUserBillboards() end
+function hookUserBillboards()
+    local function tryTag(p)
+        if not p or not p.Character then return end
+        for _, id in ipairs(OWNER_ID) do if p.UserId == id then return end end
+        for _, id in ipairs(BUYER_IDS) do if p.UserId == id then return end end
+        if not confirmedHubUsers[p] then
+            confirmedHubUsers[p] = true
+            watchHubUserRespawn(p)
+        end
+        createUserBillboard(p, true)
+    end
+
+    local function watchCharacter(p, char)
+        char.ChildAdded:Connect(function(child)
+            if child.Name == "RomazHubActive" then
+                tryTag(p)
+            end
+        end)
+        if char:FindFirstChild("RomazHubActive") then
+            tryTag(p)
+        end
+    end
+
+    local function watchPlayer(p)
+        if p.Character then watchCharacter(p, p.Character) end
+        p.CharacterAdded:Connect(function(char)
+            task.wait(1)
+            watchCharacter(p, char)
+        end)
+    end
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= plr then watchPlayer(p) end
+    end
+    Players.PlayerAdded:Connect(function(p)
+        task.wait(2)
+        watchPlayer(p)
+    end)
+end
+hookUserBillboards()
 
  function createOwnerBillboard(player)
     createStyledBillboard(player, {
@@ -2591,8 +2592,6 @@ end
 end
 hookOwnerBillboards()
 
-
--- Enhanced Delete Aura (TCO Feature)
 function StartDeleteAura()
     if deleteAuraConnection then
         deleteAuraConnection:Disconnect()
@@ -2624,7 +2623,6 @@ function StartDeleteAura()
     end)
 end
 
--- Toxify Aura Function
 function StartToxifyAura()
     if toxifyAuraConnection then
         toxifyAuraConnection:Disconnect()
@@ -2651,17 +2649,15 @@ function StartToxifyAura()
     end)
 end
 
--- Build progress display (no-op after preset removal)
 function updateBuildProgress()
 end
 
--- Anti-Void System
 function StartAntiVoid()
     if antiVoidConnection then
         antiVoidConnection:Disconnect()
     end
     
-    workspace.FallenPartsDestroyHeight = -50000  -- Set ONCE here
+    workspace.FallenPartsDestroyHeight = -50000
     
     antiVoidConnection = RunService.Stepped:Connect(function()
         if not antiVoidEnabled or not plr.Character then return end
@@ -2682,7 +2678,6 @@ function StopAntiVoid()
     workspace.FallenPartsDestroyHeight = originalDestroyHeight
 end
 
--- Anti Functions
 function StartAntiBlind()
     if antiConnections["Blind"] then
         antiConnections["Blind"]:Disconnect()
@@ -2695,7 +2690,6 @@ function StartAntiBlind()
     end)
 end
 
--- Color Painting Functions
 local colorto = Color3.new(1,1,1)
 
 local gradcolor = ColorSequence.new({
@@ -2727,7 +2721,7 @@ end
 
 function PaintEverything()
     local paintevent = game.Players.LocalPlayer.Character.PaintBucket.Remotes.ServerControls
-    beforecolors = {} -- Store globally for revert
+    beforecolors = {}
     
      function fpa(cube,color)
         coroutine.wrap(function()
@@ -2741,7 +2735,7 @@ function PaintEverything()
         end)()
     end
     
-    -- Paint everything with selected color
+
     fpa(game.ReplicatedStorage.Brick, colorto)
     
     for i,v in pairs(game:GetDescendants()) do
@@ -2780,8 +2774,6 @@ function RevertPaint(beforecolor)
     
     Library:Notify("Colors reverted to original!", 3)
 end
-
--- Add these functions BEFORE the anti functions
 
 asked = false
 resetconf = Instance.new("BindableFunction")
@@ -2838,7 +2830,6 @@ end
     end
 end
 
--- Add breakvel function if it doesn't exist
 function breakvel()
     local BeenASecond, V3 = false, Vector3.new(0, 0, 0)
     delay(1, function()
@@ -2855,7 +2846,6 @@ function breakvel()
         task.wait()
     end
 end
-
 
 function StartAntiDrag()
     if antiConnections["Drag"] then
@@ -2893,8 +2883,6 @@ function StartAntiJail()
         task.wait(0.5)
     end)
 end
-
-
 
 function StartAntiFreeze()
     if antiConnections["Freeze"] then
@@ -2956,8 +2944,6 @@ function StartAntiFog()
     end)
 end
 
--- Add these functions AFTER the existing anti functions
-
 function StartAntiVampire()
     if antiConnections["Vampire"] then
         antiConnections["Vampire"]:Disconnect()
@@ -2986,7 +2972,7 @@ function StartAntiFling()
         antiConnections["Fling"]:Disconnect()
     end
     
-    local FLING_THRESHOLD = 200  -- studs/sec, tweak this if needed
+    local FLING_THRESHOLD = 200
     local FARLANDS_LIMIT = 10000
     
     antiConnections["Fling"] = RunService.Heartbeat:Connect(function()
@@ -2999,13 +2985,13 @@ function StartAntiFling()
         local speed = velocity.Magnitude
         local pos = root.Position
         
-        -- Only zero velocity if it's actually a fling, not normal movement
+
         if speed > FLING_THRESHOLD then
             root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
             root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
         end
         
-        -- Teleport back if in farlands
+
         if math.abs(pos.X) > FARLANDS_LIMIT or 
            math.abs(pos.Y) > FARLANDS_LIMIT or 
            math.abs(pos.Z) > FARLANDS_LIMIT then
@@ -3105,8 +3091,6 @@ function StartAntiCursed()
     end)
 end
 
--- Tool Management System
--- Replace the entire toolManagementConnection block:
 local _toolMgmtTimer = 0
 local toolManagementConnection = RunService.Heartbeat:Connect(function(dt)
     _toolMgmtTimer = _toolMgmtTimer + dt
@@ -3152,7 +3136,6 @@ local toolManagementConnection = RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- Initialize UI Elements
 local modes = {
     {name = "Spray", mode = "spray"},
     {name = "Toxic", mode = "toxic"},
@@ -3165,7 +3148,6 @@ for _, modeData in ipairs(modes) do
     table.insert(modeNames, modeData.name)
 end
 
--- Main Paint Tab (Fixed and Complete)
 local PaintGroup = Tabs.Build:AddLeftGroupbox('Paint Configuration')
 
 local SelectedColor = PaintGroup:AddDropdown('SelectedColor', {
@@ -3194,12 +3176,12 @@ local normalidnames = {
 local SelectedPaintSides = PaintGroup:AddDropdown('SelectedColor', {
     Values = {
         "All",
-        "Top", -- up up
-        "Bottom", -- down down
-        "Left", -- left right
-        "Right", -- left right
-        "Front", -- b a
-        "Back" -- start
+        "Top",
+        "Bottom",
+        "Left",
+        "Right",
+        "Front",
+        "Back"
     },
     Default = 1,
     Text = 'Paint Sides:',
@@ -3396,7 +3378,6 @@ PaintGroup:AddButton({
     end
 })
 
--- Color Painter Group (Fixed)
 local ColorPainterGroup = Tabs.Build:AddRightGroupbox('Color Painter')
 
 local colorOptions = {
@@ -3485,10 +3466,8 @@ function PaintEverythingCP(targetColor)
     local paintevent = pb.Remotes.ServerControls
     cpBeforeColors = {}
 
-    -- Paint the template brick first (required by the game)
     cpFpa(paintevent, game.ReplicatedStorage.Brick, targetColor)
 
-    -- Paint every descendant
     for _, v in pairs(game:GetDescendants()) do
         local ok, col = pcall(function() return v.Color end)
         if ok then
@@ -3570,12 +3549,8 @@ ColorPainterGroup:AddButton({
     Func = RevertPaintCP
 })
 
--- TCO Auras Tab (Complete and Fixed)
-
--- Server Tab Content
 local ServerGroup = Tabs.Server:AddLeftGroupbox('Server Management')
 
--- Server joining functions
 ServerGroup:AddButton({
     Text = 'Join VC Server',
     Func = function()
@@ -3603,7 +3578,6 @@ ServerGroup:AddButton({
     end
 })
 
--- Enhanced server hop function
 function hopToBetterServer()
     local servers = {}
     local success, result = pcall(function()
@@ -3638,7 +3612,6 @@ ServerGroup:AddButton({
     end
 })
 
--- Server Information Group
 local ServerInfoGroup = Tabs.Server:AddLeftGroupbox('Server Information')
 
 ServerInfoGroup:AddLabel('Current Server Type: ' .. (
@@ -3659,7 +3632,6 @@ ServerInfoGroup:AddButton({
     end
 })
 
--- Quick Actions Group
 local QuickServerGroup = Tabs.Server:AddRightGroupbox('Quick Actions')
 
 QuickServerGroup:AddButton({
@@ -3837,7 +3809,7 @@ AuraSettingsGroup:AddButton({
         Library:Notify("All antis enabled!", 3)
     end
 })
--- Update the existing "Disable All" button to include new antis
+
 AuraSettingsGroup:AddButton({
     Text = 'Disable All',
     Func = function()
@@ -3860,9 +3832,6 @@ AuraSettingsGroup:AddButton({
     end
 })
 
--- Add TCO Tool Management to Tools Tab
-
--- Find Players with Enlighten Feature
 local EnlightenGroup = Tabs.Chat:AddRightGroupbox('Enlighten Finder')
 
 local enlightenPlayersLabel = EnlightenGroup:AddLabel('Players with Enlighten: None')
@@ -3872,20 +3841,20 @@ function FindPlayersWithEnlighten()
     
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= plr then
-            -- Check backpack
+
             local backpack = player:FindFirstChild("Backpack")
             if backpack and backpack:FindFirstChild("The Arkenstone") then
                 table.insert(enlightenPlayers, player.Name .. " (Backpack)")
             end
             
-            -- Check character
+
             if player.Character then
                 if player.Character:FindFirstChild("The Arkenstone") then
                     table.insert(enlightenPlayers, player.Name .. " (Equipped)")
                 end
             end
             
-            -- Check if player is chosen (has enlighten permission)
+
             if player:GetAttribute("Arken") == true then
                 table.insert(enlightenPlayers, player.Name .. " (Chosen)")
             end
@@ -3908,7 +3877,6 @@ EnlightenGroup:AddButton({
     Func = FindPlayersWithEnlighten
 })
 
--- Auto-scan toggle
 local AutoScanToggle = EnlightenGroup:AddToggle('AutoScanEnlighten', {
     Text = 'Auto Scan (30s)',
     Default = false,
@@ -3936,11 +3904,9 @@ AutoScanToggle:OnChanged(function(value)
     end
 end)
 
-
 local TCOToolsGroup = Tabs.Chat:AddRightGroupbox('Boombox Utility')
 BoomboxStatus = TCOToolsGroup:AddLabel('Select a Boombox')
 
--- Boombox selection function
  function onInputBegan(input, gameProcessed)
     if gameProcessed then return end
     
@@ -3995,7 +3961,6 @@ BoomboxStatus = TCOToolsGroup:AddLabel('Select a Boombox')
     end
 end
 
--- Hook the input event
 UserInputService.InputBegan:Connect(onInputBegan)
 
 TCOToolsGroup:AddButton({
@@ -4019,14 +3984,13 @@ TCOToolsGroup:AddButton({
     Func = function()
         local boomboxList = {}
         
-        -- Clear existing highlights
+
         for _, obj in pairs(CoreGui:GetChildren()) do
             if obj.Name == "BoomboxHighlight" then
                 obj:Destroy()
             end
         end
 
-        -- Scan for boomboxes
         for _, item in pairs(workspace:GetDescendants()) do
             if item:IsA("Tool") and boomboxNames[item.Name] == true then
                 table.insert(boomboxList, item)
@@ -4077,9 +4041,6 @@ TCOToolsGroup:AddButton({
     end
 })
 
--- Mute Boomboxes Featur
-
--- Toggle handler for muting boomboxes
 local ToolsEtc = Tabs.Chat:AddRightGroupbox('Tool Utility')
 
 local muteBoomboxesEnabled = false
@@ -4089,7 +4050,6 @@ local MuteBoomboxesToggle = ToolsEtc:AddToggle('MuteBoomboxes', {
     Default = false,
     Tooltip = 'Mute all boombox sounds on the server'
 })
-
 
 local AutoPickup = ToolsEtc:AddToggle('AutoPickup', {
     Text = 'Auto Pickup Tools',
@@ -4102,7 +4062,6 @@ local AutoDrop = ToolsEtc:AddToggle('AutoDrop', {
     Default = false,
     Tooltip = 'Automatically drop tools when dying'
 })
-
 
 local DontDropEnlighten = ToolsEtc:AddToggle('DontDropEnlighten', {
     Text = "Prevent Enlighten Drop",
@@ -4149,7 +4108,6 @@ ToolsEtc:AddButton({
     end
 })
 
--- Build Tab specific variables and functions
 local http = game:GetService("HttpService")
 local localplr = game.Players.LocalPlayer
 local lte = nil
@@ -4225,7 +4183,6 @@ snap = function(pos,m)
     return pos
 end
 
--- Initialize cube history
 if workspace.Bricks:FindFirstChild(game.Players.LocalPlayer.Name) then
     cubechild = workspace.Bricks[game.Players.LocalPlayer.Name].ChildAdded:Connect(function(child)
         childcube = child
@@ -4536,7 +4493,6 @@ sortBlocksByDistanceFromSpawn = function(buildData)
         return a.distance < b.distance
     end)
 
-    -- Clean up temporary fields
     for _, block in ipairs(buildData) do
         block.distance = nil
         block.originalIndex = nil
@@ -4544,8 +4500,6 @@ sortBlocksByDistanceFromSpawn = function(buildData)
 
     return buildData
 end
-
-
 
 buildblock = function(pos,texture,color,bsize,bsizev3,premadebuild,origmaterial,sprays,anchored,collide)
     task.wait()
@@ -4956,13 +4910,13 @@ local _permDeleteSoundConn = nil
 BuildServerGroup:AddButton({
     Text = 'Disable Delete Sound (bypass grief notifiers)',
     Func = function()
-        -- Mute existing
+
         for _, desc in ipairs(workspace.Bricks:GetDescendants()) do
             if desc:IsA("Sound") then
                 desc.Volume = 0
             end
         end
-        -- Mute future
+
         if _permDeleteSoundConn then
             _permDeleteSoundConn:Disconnect()
         end
@@ -4975,7 +4929,6 @@ BuildServerGroup:AddButton({
     end
 })
 
--- Shared restore logic used by both slow and fast methods
 local function doRestoreBuilding(delay)
     if not game.ReplicatedStorage:FindFirstChild("Brick") then
         local brick = Instance.new("Part")
@@ -5064,10 +5017,6 @@ BuildServerGroup:AddButton({
     end
 })
 
--- ── Export ──────────────────────────────────────────────────────
-
-
--- ── Import ──────────────────────────────────────────────────────
 local BuildImportGroup = Tabs.Build:AddLeftGroupbox('Import Build')
 
 local importJsonInput = BuildImportGroup:AddInput('ImportJSON', {
@@ -5172,7 +5121,6 @@ BuildExportGroup:AddButton({
     end
 })
 
-
 files = listfilesfixed("")
 if not files then files = {} end
 
@@ -5182,14 +5130,11 @@ pcall(function()
     end
 end)
 
--- ============================================================
---  ESP TAB UI
--- ============================================================
  ESPGroup = Tabs.Server:AddLeftGroupbox('Player ESP')
 
 PlayersESPToggle = ESPGroup:AddToggle('PlayersESP', {
     Text = 'Players ESP',
-    Default = false,
+    Default = true,
     Tooltip = 'Show highlight on all players'
 })
 
@@ -5211,14 +5156,6 @@ PlayersESPToggle = ESPGroup:AddToggle('PlayersESP', {
     Tooltip = 'Show how many cubes each player has built'
 })
 
- ESPXrayToggle = ESPGroup:AddToggle('ESPXray', {
-    Text = 'X-Ray',
-    Default = false,
-    Tooltip = 'Players visible through walls'
-})
-
-ESPGroup:AddDivider()
-
  ESPTargetInput = ESPGroup:AddInput('ESPTarget', {
     Default = 'all',
     Numeric = false,
@@ -5228,24 +5165,6 @@ ESPGroup:AddDivider()
     Tooltip = 'Filter ESP to specific player name, or use all/others'
 })
 
-ESPGroup:AddDivider()
-
-ESPGroup:AddButton({
-    Text = 'Refresh Player ESP',
-    Func = function()
-        RemoveAllESP()
-        if PlayersESPToggle.Value then
-            for _, player in ipairs(Players:GetPlayers()) do
-                if shouldESPPlayer(player) then
-                    CreateESP(player)
-                end
-            end
-        end
-        Library:Notify("ESP refreshed", 3)
-    end
-})
-
--- Buildings ESP
  BuildESPGroup = Tabs.Server:AddRightGroupbox('Build Tracker ESP')
 
 BuildingsESPToggle = BuildESPGroup:AddToggle('BuildingsESP', {
@@ -5303,23 +5222,6 @@ BuildESPGroup:AddButton({
     end
 })
 
-BuildESPGroup:AddButton({
-    Text = 'Refresh Build ESP',
-    Func = function()
-        RemoveAllBuildESP()
-        if BuildingsESPToggle.Value then
-            local target = BuildESPTargetInput.Value
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= plr and (target == "all" or player.Name:lower():find(target:lower())) then
-                    CreateBuildESP(player)
-                end
-            end
-        end
-        Library:Notify("Build ESP refreshed", 3)
-    end
-})
-
--- ESP Color/Style Settings
 local ESPColors = Tabs.Server:AddRightGroupbox('ESP Appearance')
 
 local espColorOptions = {"Red", "Blue", "Green", "Yellow", "Purple", "White", "Cyan", "Orange", "Pink", "Rainbow"}
@@ -5364,7 +5266,6 @@ ESPColors:AddButton({
     end
 })
 
--- ── Tool ESP Group ──────────────────────────────────────────
 local ToolESPGroup = Tabs.Server:AddRightGroupbox('Tool ESP')
 
 local ToolsESPToggle = ToolESPGroup:AddToggle('ToolsESP', {
@@ -5424,21 +5325,21 @@ ToolESPGroup:AddSlider('ToolESPMaxDist', {
 
 ToolESPGroup:AddDivider()
 
-ToolESPGroup:AddButton({
-    Text = 'Refresh Tool ESP',
-    Func = function()
-        if ToolsESPToggle.Value then
-            ToolsESPToggle:SetValue(false)
-            task.wait(0.1)
-            ToolsESPToggle:SetValue(true)
-        end
-        Library:Notify("Tool ESP refreshed", 3)
-    end
-})
-
-local toolsESPLabels = {} -- tool -> {bb, nameLabel, distLabel}
+local toolsESPLabels = {}
  _toolsESPAddConn    = nil
  _toolsESPRemoveConn = nil
+
+local function isDroppedTool(obj)
+    if not obj or not obj:IsA("Tool") then return false end
+    if not obj:IsDescendantOf(workspace) then return false end
+    for _, p in ipairs(Players:GetPlayers()) do
+        local char = p.Character
+        if char and obj:IsDescendantOf(char) then return false end
+        local bp = p:FindFirstChild("Backpack")
+        if bp and obj:IsDescendantOf(bp) then return false end
+    end
+    return true
+end
 
 local function getToolESPColor()
     local sel = ToolESPColorPicker.Value
@@ -5494,7 +5395,6 @@ local function removeToolESPLabel(tool)
     end
 end
 
--- Update loop for tool ESP distance labels
 task.spawn(function()
     while not Library.Unloaded do
         if ToolsESPToggle.Value then
@@ -5502,7 +5402,7 @@ task.spawn(function()
             local toRemove = {}
             for tool, data in pairs(toolsESPLabels) do
                 pcall(function()
-                    if not tool or not tool.Parent then
+                    if not tool or not tool.Parent or not isDroppedTool(tool) then
                         table.insert(toRemove, tool)
                         return
                     end
@@ -5518,6 +5418,10 @@ task.spawn(function()
             end
             for _, tool in ipairs(toRemove) do
                 removeToolESPLabel(tool)
+                if toolsESPObjects[tool] then
+                    pcall(function() toolsESPObjects[tool]:Destroy() end)
+                    toolsESPObjects[tool] = nil
+                end
             end
         end
         task.wait(0.5)
@@ -5537,18 +5441,6 @@ ToolsESPToggle:OnChanged(function(value)
     end
 
     if not value then return end
-
-    local function isDroppedTool(obj)
-        if not obj or not obj:IsA("Tool") then return false end
-        if not obj:IsDescendantOf(workspace)   then return false end
-        for _, p in ipairs(Players:GetPlayers()) do
-            local char = p.Character
-            if char and obj:IsDescendantOf(char) then return false end
-            local bp = p:FindFirstChild("Backpack")
-            if bp   and obj:IsDescendantOf(bp)   then return false end
-        end
-        return true
-    end
 
     local function highlightDroppedTool(tool)
         if not isDroppedTool(tool) then return end
@@ -5637,12 +5529,17 @@ ToolESPColorPicker:OnChanged(function(value)
     end
 end)
 
--- Set up these once, OUTSIDE the toggle handler, after PlayersESPToggle is defined:
 Players.PlayerAdded:Connect(function(player)
     task.wait(.1)
     if PlayersESPToggle.Value and shouldESPPlayer(player) then
         CreateESP(player)
     end
+    player.CharacterAdded:Connect(function()
+        task.wait(0.5)
+        if PlayersESPToggle.Value and shouldESPPlayer(player) then
+            CreateESP(player)
+        end
+    end)
     if BuildingsESPToggle.Value then
         local target = BuildESPTargetInput.Value
         if player ~= plr and (target == "all" or player.Name:lower():find(target:lower())) then
@@ -5668,7 +5565,6 @@ plr.CharacterAdded:Connect(function()
     end
 end)
 
--- Then the toggle handler becomes clean:
 PlayersESPToggle:OnChanged(function(value)
     if value then
         StartESPUpdateLoop()
@@ -5706,27 +5602,35 @@ BuildingsESPToggle:OnChanged(function(value)
     end
 end)
 
-ESPXrayToggle:OnChanged(function(value)
-    espXrayEnabled = value
+BuildESPTargetInput:OnChanged(function(value)
+    if BuildingsESPToggle.Value then
+        RemoveAllBuildESP()
+        local target = value ~= "" and value or "all"
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= plr and (target == "all" or player.Name:lower():find(target:lower())) then
+                CreateBuildESP(player)
+            end
+        end
+    end
+end)
 
-    -- Player highlights
-    for player, hl in pairs(espObjects) do
-        hl.DepthMode = value
-            and Enum.HighlightDepthMode.AlwaysOnTop
-            or  Enum.HighlightDepthMode.Occluded
+task.defer(function()
+    if PlayersESPToggle.Value then
+        StartESPUpdateLoop()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if shouldESPPlayer(player) then
+                CreateESP(player)
+            end
+        end
     end
-    for player, data in pairs(espNameLabels) do
-        if data.bb then data.bb.AlwaysOnTop = value end
-    end
-
-    -- Build highlights (now Highlights, same enum)
-    for player, hl in pairs(espBuildObjects) do
-        hl.DepthMode = value
-            and Enum.HighlightDepthMode.AlwaysOnTop
-            or  Enum.HighlightDepthMode.Occluded
-    end
-    for player, data in pairs(espBuildLabels) do
-        if data.bb then data.bb.AlwaysOnTop = value end
+    if BuildingsESPToggle.Value then
+        if not espUpdateConnection then StartESPUpdateLoop() end
+        local target = BuildESPTargetInput.Value
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= plr and (target == "all" or player.Name:lower():find(target:lower())) then
+                CreateBuildESP(player)
+            end
+        end
     end
 end)
 
@@ -5761,8 +5665,6 @@ ESPTargetInput:OnChanged(function(value)
     end
 end)
 
-
--- Settings Group
 local SettingsGroup = Tabs.Settings:AddLeftGroupbox('General Information')
 
 local AutoRejoin = SettingsGroup:AddToggle('AutoRejoin', {
@@ -5811,149 +5713,10 @@ CreditsGroup:AddButton({
     end
 })
 
--- Advanced Tools Group
-
--- ================================================================
---  Themed tool panel builder — matches RomazHub Library colors
--- ================================================================
-local _toolPanels = {} -- track all panels for theme updates
-
-function createToolPanel(config)
-    local gui = Instance.new("ScreenGui")
-    gui.Name = config.name or "ToolPanel"
-    gui.ResetOnSpawn = false
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.Enabled = false
-    gui.Parent = game.CoreGui
-
-    local frame = Instance.new("Frame")
-    frame.AnchorPoint = config.anchor or Vector2.new(0.5, 0)
-    frame.BackgroundColor3 = Library.BackgroundColor
-    frame.BackgroundTransparency = 0.05
-    frame.BorderSizePixel = 0
-    frame.Position = config.position or UDim2.new(0.5, 0, 0.03, 0)
-    frame.Size = config.size or UDim2.new(0, 200, 0, 140)
-    frame.ClipsDescendants = true
-    frame.Parent = gui
-    do
-        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = frame
-        local s = Instance.new("UIStroke"); s.Color = Library.AccentColor; s.Thickness = 2; s.Parent = frame
-        s.Name = "AccentStroke"
-    end
-
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.AnchorPoint = Vector2.new(0.5, 0)
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.new(0.5, 0, 0.02, 0)
-    title.Size = UDim2.new(0.92, 0, 0.13, 0)
-    title.Font = Library.BoldFont or Enum.Font.GothamBold
-    title.Text = config.title or "Tool"
-    title.TextColor3 = Library.AccentColor
-    title.TextScaled = true
-    title.TextTruncate = Enum.TextTruncate.AtEnd
-    title.Parent = frame
-
-    local status = Instance.new("TextLabel")
-    status.Name = "Status"
-    status.AnchorPoint = Vector2.new(0.5, 1)
-    status.BackgroundTransparency = 1
-    status.Position = UDim2.new(0.5, 0, 0.98, 0)
-    status.Size = UDim2.new(0.92, 0, 0.18, 0)
-    status.Font = Library.Font or Enum.Font.Gotham
-    status.Text = config.statusText or ""
-    status.TextColor3 = Library.FontColor or Color3.fromRGB(200, 200, 200)
-    status.TextScaled = true
-    status.TextWrapped = true
-    status.TextTruncate = Enum.TextTruncate.AtEnd
-    status.Parent = frame
-
-    local panel = {gui = gui, frame = frame, title = title, status = status}
-    table.insert(_toolPanels, panel)
-    return panel
-end
-
-function createToolInput(parent, yPos, placeholder)
-    local box = Instance.new("TextBox")
-    box.AnchorPoint = Vector2.new(0.5, 0)
-    box.BackgroundColor3 = Library.MainColor
-    box.BorderSizePixel = 0
-    box.Position = UDim2.new(0.5, 0, yPos, 0)
-    box.Size = UDim2.new(0.84, 0, 0.12, 0)
-    box.Font = Library.Font or Enum.Font.Gotham
-    box.PlaceholderText = placeholder or ""
-    box.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
-    box.Text = ""
-    box.TextColor3 = Library.FontColor or Color3.fromRGB(255, 255, 255)
-    box.TextScaled = true
-    box.ClearTextOnFocus = true
-    box.ClipsDescendants = true
-    box.Parent = parent
-    do
-        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 4); c.Parent = box
-        local s = Instance.new("UIStroke"); s.Color = Library.OutlineColor; s.Thickness = 1; s.Parent = box
-    end
-    return box
-end
-
-function createToolButton(parent, text, yPos, xPos, width, callback)
-    local btn = Instance.new("TextButton")
-    btn.AnchorPoint = Vector2.new(0, 0)
-    btn.BackgroundColor3 = Library.AccentColor
-    btn.BorderSizePixel = 0
-    btn.Position = UDim2.new(xPos, 0, yPos, 0)
-    btn.Size = UDim2.new(width or 0.44, 0, 0.1, 0)
-    btn.Font = Library.BoldFont or Enum.Font.GothamBold
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.TextScaled = true
-    btn.ClipsDescendants = true
-    btn.Parent = parent
-    do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 4); c.Parent = btn end
-    if callback then btn.MouseButton1Click:Connect(callback) end
-    return btn
-end
-
-function createToolLabel(parent, text, yPos)
-    local lbl = Instance.new("TextLabel")
-    lbl.AnchorPoint = Vector2.new(0.5, 0)
-    lbl.BackgroundColor3 = Library.MainColor
-    lbl.BackgroundTransparency = 0.3
-    lbl.BorderSizePixel = 0
-    lbl.Position = UDim2.new(0.5, 0, yPos, 0)
-    lbl.Size = UDim2.new(0.84, 0, 0.12, 0)
-    lbl.Font = Library.Font or Enum.Font.Gotham
-    lbl.Text = text
-    lbl.TextColor3 = Library.FontColor or Color3.fromRGB(200, 200, 200)
-    lbl.TextScaled = true
-    lbl.TextTruncate = Enum.TextTruncate.AtEnd
-    lbl.ClipsDescendants = true
-    lbl.Parent = parent
-    do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 4); c.Parent = lbl end
-    return lbl
-end
-
--- Update all tool panels when theme changes
-task.defer(function()
-    while not Library.Unloaded do
-        for _, panel in ipairs(_toolPanels) do
-            pcall(function()
-                if panel.frame and panel.frame.Parent then
-                    panel.frame.BackgroundColor3 = Library.BackgroundColor
-                    local stroke = panel.frame:FindFirstChild("AccentStroke")
-                    if stroke then stroke.Color = Library.AccentColor end
-                end
-                if panel.title and panel.title.Parent then
-                    panel.title.TextColor3 = Library.AccentColor
-                end
-                if panel.status and panel.status.Parent then
-                    panel.status.TextColor3 = Library.FontColor or Color3.fromRGB(200, 200, 200)
-                end
-            end)
-        end
-        task.wait(1)
-    end
-end)
+local function createToolPanel(config) return Library:CreateToolPanel(config) end
+local function createToolInput(parent, yPos, placeholder) return Library:CreateToolInput(parent, yPos, placeholder) end
+local function createToolButton(parent, text, yPos, xPos, width, callback) return Library:CreateToolButton(parent, text, yPos, xPos, width, callback) end
+local function createToolLabel(parent, text, yPos) return Library:CreateToolLabel(parent, text, yPos) end
 
 function getplrcfr(p)
     local c = (p or localplr).Character
@@ -5994,41 +5757,41 @@ function union(p1,p2s,un)
     end
     return po[1]
 end
-local w = union(p1,{p2}) -- origin (front bottom right)
+local w = union(p1,{p2})
 w.UsePartColor = true
 w.Name = "fbr"
 w.Color = Color3.fromRGB(0,0,255)
 m = 1/1.5
 local c4 = w:Clone()
-c4.Position = w.CFrame * Vector3.new(m,0,0) -- front bottom left
+c4.Position = w.CFrame * Vector3.new(m,0,0)
 c4.Name = "fbl"
 c4.Rotation = Vector3.new(0,0,180)
 c4.Color = Color3.fromRGB(0,255,0)
 local c3 = w:Clone()
-c3.Position = w.CFrame * Vector3.new(0,m,0) -- front top right
+c3.Position = w.CFrame * Vector3.new(0,m,0)
 c3.Name = "ftr"
 c3.Color = Color3.fromRGB(255,255,255)
 local c5 = w:Clone()
-c5.Position = w.CFrame * Vector3.new(m,m,0) -- front top left
+c5.Position = w.CFrame * Vector3.new(m,m,0)
 c5.Name = "ftl"
 c5.Color = Color3.fromRGB(255,0,0)
 local c1 = w:Clone()
-c1.Position = w.CFrame * Vector3.new(0,0,m) -- back bottom right
+c1.Position = w.CFrame * Vector3.new(0,0,m)
 c1.Name = "bbr"
 c1.Rotation = Vector3.new(180,0,0)
 c1.Color = Color3.fromRGB(0,255,0)
 local c7 = w:Clone()
-c7.Position = w.CFrame * Vector3.new(m,0,m) -- back bottom left
+c7.Position = w.CFrame * Vector3.new(m,0,m)
 c7.Name = "bbl"
 c7.Rotation = Vector3.new(180,0,0)
 c7.Color = Color3.fromRGB(0,0,255)
 local c2 = w:Clone()
-c2.Position = w.CFrame * Vector3.new(0,m,m) -- back top right
+c2.Position = w.CFrame * Vector3.new(0,m,m)
 c2.Name = "btr"
 c2.Rotation = Vector3.new(180,0,180)
 c2.Color = Color3.fromRGB(255,0,0)
 local c6 = w:Clone()
-c6.Position = w.CFrame * Vector3.new(m,m,m) -- back top left
+c6.Position = w.CFrame * Vector3.new(m,m,m)
 c6.Name = "btl"
 c6.Rotation = Vector3.new(180,0,180)
 c6.Color = Color3.fromRGB(255,255,255)
@@ -6124,7 +5887,7 @@ local isnetworkowner = isnetworkowner or function(part)
     task.wait(0.5)
     return true
 end
-function gcp(p,plr) -- get character part, putting "getc..." wouldnt be good so i just shortened it even more
+function gcp(p,plr)
     local c = (plr ~= nil and plr.Character) or localplr.Character
     p = p:lower()
     if p == "hrp" then
@@ -6139,7 +5902,7 @@ function gcp(p,plr) -- get character part, putting "getc..." wouldnt be good so 
     end
 end
 local tagged = {}
-function gettag(t) -- tag = bad
+function gettag(t)
     return (tagged[t] and tagged[t] > tick()) or false
 end
 function settag(t,num)
@@ -6326,7 +6089,6 @@ function createrotool()
     local connections = {}
     currentrtool = rtool:Clone()
 
-    -- Remove the conveyor beam; it lives in the linvel tool now
     local oldBeam = currentrtool:FindFirstChildWhichIsA("Beam")
     if oldBeam then oldBeam:Destroy() end
 
@@ -6346,7 +6108,6 @@ function createrotool()
     handle.Weld.Part0 = union
     handle.Weld.Part1 = handle
 
-    -- Equipped
     table.insert(connections, currentrtool.Equipped:Connect(function()
         union.Parent = workspace
         equipped = true
@@ -6354,7 +6115,6 @@ function createrotool()
         updateInputDisplay()
     end))
 
-    -- Unequipped
     table.insert(connections, currentrtool.Unequipped:Connect(function()
         if not equipped then return end
         union.Parent = handle
@@ -6371,7 +6131,6 @@ function createrotool()
         Shape.Enabled = false
     end))
 
-    -- Block selection
     table.insert(connections, mouse.Button1Down:Connect(function()
         if not equipped then return end
         local issel = IsSelectable(mouse.Target, mouse.Hit.Position)
@@ -6404,7 +6163,6 @@ function createrotool()
         mdown = nil
     end))
 
-    -- Arc handle drag
     table.insert(connections, rotatehandles.MouseButton1Down:Connect(function(axis)
         if not equipped then return end
         if selection and sclone then
@@ -6449,7 +6207,6 @@ function createrotool()
         end
     end))
 
-    -- Confirm rotation
     table.insert(connections, ConfirmButton.MouseButton1Click:Connect(function()
         if sclone and selection then
             rotate(selection, sclone.CFrame, currentrtool)
@@ -6469,11 +6226,6 @@ function createrotool()
     return currentrtool
 end
 
--- ================================================================
---  LINEAR VELOCITY TOOL
--- ================================================================
-
--- GUI
 local _lvPanel = createToolPanel({
     name = "LinVelGui",
     title = "Linear Velocity",
@@ -6500,7 +6252,6 @@ if LVInput and scriptConnections then
     end))
 end
 
--- Tool object
 local lvBaseTool = Instance.new("Tool")
 lvBaseTool.Name = "Linear Velocity Tool"
 lvBaseTool.ToolTip = "Apply linear velocity to a block"
@@ -6537,7 +6288,6 @@ function createlinveltool()
     lvSBox.Parent = game.CoreGui
     table.insert(tools, {lvSBox})
 
-    -- Conveyor beam visualization
     local lvBeam = Instance.new("Beam")
     lvBeam.Color = ColorSequence.new(Color3.fromRGB(55, 130, 255), Color3.fromRGB(0, 200, 255))
     lvBeam.Transparency = NumberSequence.new(0.3, 0.8)
@@ -6602,7 +6352,6 @@ function createlinveltool()
         updateBeam()
     end))
 
-    -- Update beam direction as mouse moves over surfaces
     table.insert(connections, mouse.Move:Connect(function()
         if not equipped or not lvSel or not lvSel.Parent then return end
         if mouse.Target == lvSel then
@@ -6626,7 +6375,6 @@ function createlinveltool()
             local hrp = localplr.Character and localplr.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
-            -- Unanchor via Paint tool if needed
             if part.Anchored then
                 local paint = localplr.Character:FindFirstChild("Paint") or localplr.Backpack:FindFirstChild("Paint")
                 if paint then
@@ -6638,13 +6386,11 @@ function createlinveltool()
                 end
             end
 
-            -- Move close and boost sim radius for ownership
             hrp.CFrame = CFrame.new(part.Position + Vector3.new(0, part.Size.Y / 2 + 3, 0))
             task.wait(0.25)
             localplr.SimulationRadius = math.max(localplr.SimulationRadius, 500)
             task.wait(0.35)
 
-            -- World-space push direction
             local faceVec = Vector3.FromNormalId(surface)
             local worldDir = part.CFrame:VectorToWorldSpace(faceVec).Unit
 
@@ -6656,7 +6402,6 @@ function createlinveltool()
 
             LVStatus.Text = "⚡ Pushed! Speed: " .. lvSpeed .. " studs/s"
 
-            -- Let it travel, then clean up
             task.delay(0.6, function()
                 if bv and bv.Parent then bv:Destroy() end
             end)
@@ -6682,12 +6427,6 @@ function createlinveltool()
     return tool
 end
 
-
--- ================================================================
---  ROTATIONAL VELOCITY TOOL
--- ================================================================
-
--- GUI
 local _rvPanel = createToolPanel({
     name = "RotVelGui",
     title = "Rotational Velocity",
@@ -6700,7 +6439,6 @@ local RVSpeedLabel = createToolLabel(_rvPanel.frame, "Speed: 180 /s | Axis: Y", 
 local RVInput = createToolInput(_rvPanel.frame, 0.32, "Speed (/s), press Enter")
 local RVStatus = _rvPanel.status
 
--- Axis buttons
 local axisRow = Instance.new("Frame")
 axisRow.AnchorPoint = Vector2.new(0.5,0)
 axisRow.BackgroundTransparency = 1
@@ -6761,7 +6499,6 @@ RVInput.FocusLost:Connect(function()
     RVInput.Text = ""
 end)
 
--- Tool object
 local rvBaseTool = Instance.new("Tool")
 rvBaseTool.Name = "Rotational Velocity Tool"
 rvBaseTool.ToolTip = "Spin blocks with angular velocity"
@@ -6835,7 +6572,6 @@ function createrotveltool()
             local hrp = localplr.Character and localplr.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
-            -- Unanchor via Paint if needed
             if part.Anchored then
                 local paint = localplr.Character:FindFirstChild("Paint") or localplr.Backpack:FindFirstChild("Paint")
                 if paint then
@@ -6847,13 +6583,11 @@ function createrotveltool()
                 end
             end
 
-            -- Get network ownership
             hrp.CFrame = CFrame.new(part.Position + Vector3.new(0, part.Size.Y / 2 + 3, 0))
             task.wait(0.25)
             localplr.SimulationRadius = math.max(localplr.SimulationRadius, 500)
             task.wait(0.35)
 
-            -- Build angular velocity vector from selected axis
             local radPerSec = math.rad(rvSpeed)
             local angVec = rvAxis == "X" and Vector3.new(radPerSec, 0, 0)
                 or rvAxis == "Y" and Vector3.new(0, radPerSec, 0)
@@ -6886,9 +6620,6 @@ function createrotveltool()
     return tool
 end
 
-
-
--- formula: block size divided by 6 (memeify)
 local dectool = Instance.new("Tool")
 dectool.Name = "Decal Tool"
 local handle = Instance.new("Part")
@@ -6919,95 +6650,48 @@ end
 
 local memeifyid = "11894923077"
 
-local decalrotations = {}
-decalrotations[Enum.NormalId.Top] = {math.rad(90),math.rad(0),math.rad(0)}
-decalrotations[Enum.NormalId.Bottom] = {math.rad(90),math.rad(0),math.rad(0)}
-decalrotations[Enum.NormalId.Left] = {math.rad(0),math.rad(90),math.rad(0)}
-decalrotations[Enum.NormalId.Right] = {math.rad(0),math.rad(-90),math.rad(0)}
-decalrotations[Enum.NormalId.Back] = {math.rad(180),math.rad(0),math.rad(180)}
-decalrotations[Enum.NormalId.Front] = {math.rad(0),math.rad(0),math.rad(0)}
-local decalrotations2 = {}
-decalrotations2[Enum.NormalId.Top] = {math.rad(0),math.rad(1),math.rad(0)}
-decalrotations2[Enum.NormalId.Bottom] = {math.rad(0),math.rad(1),math.rad(0)}
-decalrotations2[Enum.NormalId.Left] = {math.rad(0),math.rad(0),math.rad(1)}
-decalrotations2[Enum.NormalId.Right] = {math.rad(0),math.rad(0),math.rad(1)}
-decalrotations2[Enum.NormalId.Back] = {math.rad(0),math.rad(0),math.rad(1)}
-decalrotations2[Enum.NormalId.Front] = {math.rad(0),math.rad(0),math.rad(1)}
+local drot = {}
+drot[Enum.NormalId.Top] = {math.rad(90),math.rad(0),math.rad(0)}
+drot[Enum.NormalId.Bottom] = {math.rad(90),math.rad(0),math.rad(0)}
+drot[Enum.NormalId.Left] = {math.rad(0),math.rad(90),math.rad(0)}
+drot[Enum.NormalId.Right] = {math.rad(0),math.rad(-90),math.rad(0)}
+drot[Enum.NormalId.Back] = {math.rad(180),math.rad(0),math.rad(180)}
+drot[Enum.NormalId.Front] = {math.rad(0),math.rad(0),math.rad(0)}
+local drot2 = {}
+drot2[Enum.NormalId.Top] = {math.rad(0),math.rad(1),math.rad(0)}
+drot2[Enum.NormalId.Bottom] = {math.rad(0),math.rad(1),math.rad(0)}
+drot2[Enum.NormalId.Left] = {math.rad(0),math.rad(0),math.rad(1)}
+drot2[Enum.NormalId.Right] = {math.rad(0),math.rad(0),math.rad(1)}
+drot2[Enum.NormalId.Back] = {math.rad(0),math.rad(0),math.rad(1)}
+drot2[Enum.NormalId.Front] = {math.rad(0),math.rad(0),math.rad(1)}
 
-local idkwhattonamets = {}
-idkwhattonamets[Enum.NormalId.Top] = {
+local dsizes = {}
+dsizes[Enum.NormalId.Top] = {
     "X","Z"
 }
-idkwhattonamets[Enum.NormalId.Bottom] = {
+dsizes[Enum.NormalId.Bottom] = {
     "X","Z"
 }
-idkwhattonamets[Enum.NormalId.Left] = {
+dsizes[Enum.NormalId.Left] = {
     "Z","Y"
 }
-idkwhattonamets[Enum.NormalId.Right] = {
+dsizes[Enum.NormalId.Right] = {
     "Z","Y"
 }
-idkwhattonamets[Enum.NormalId.Back] = {
+dsizes[Enum.NormalId.Back] = {
     "X","Y"
 }
-idkwhattonamets[Enum.NormalId.Front] = {
+dsizes[Enum.NormalId.Front] = {
     "X","Y"
 }
 
-local sui = Instance.new("ScreenGui")
-local setdecal = Instance.new("TextBox")
-local rotatebutton = Instance.new("TextButton")
-local imageindicator = Instance.new("ImageLabel")
-local sizeconst1 = Instance.new("UIAspectRatioConstraint")
-local sizeconst2 = Instance.new("UIAspectRatioConstraint")
-local sizeconst3 = Instance.new("UIAspectRatioConstraint")
-
-sui.Parent = game.CoreGui
-sui.ResetOnSpawn = false
-sui.IgnoreGuiInset = true
-sui.Enabled = false
-
-setdecal.Parent = sui
-setdecal.AnchorPoint = Vector2.new(0.5, 0)
-setdecal.BackgroundColor3 = Color3.fromRGB(128,128,128)
-setdecal.BackgroundTransparency = 0
-setdecal.BorderColor3 = Color3.fromRGB(0, 0, 0)
-setdecal.BorderSizePixel = 3
-setdecal.Position = UDim2.new(0.465, 0, 0.05, 0)
-setdecal.Size = UDim2.new(0.1, 0, 0.1, 0)
-setdecal.Font = Enum.Font.FredokaOne
-setdecal.Text = ""
-setdecal.PlaceholderText = "Set a Decal ID Here!"
-setdecal.TextColor3 = Color3.fromRGB(255,255,255)
-setdecal.TextScaled = true
-
-rotatebutton.Parent = sui
-rotatebutton.AnchorPoint = Vector2.new(0.5, 0)
-rotatebutton.BackgroundColor3 = Color3.fromRGB(128,128,128)
-rotatebutton.BackgroundTransparency = 0
-rotatebutton.BorderColor3 = Color3.fromRGB(0, 0, 0)
-rotatebutton.BorderSizePixel = 3
-rotatebutton.Position = UDim2.new(0.535, 0, 0.05, 0)
-rotatebutton.Size = UDim2.new(0.1, 0, 0.1, 0)
-rotatebutton.Font = Enum.Font.FredokaOne
-rotatebutton.Text = "Rotate Image by 90 Degrees"
-rotatebutton.TextColor3 = Color3.fromRGB(255,255,255)
-rotatebutton.TextScaled = true
-
-imageindicator.Parent = sui
-imageindicator.AnchorPoint = Vector2.new(0.5, 0)
-imageindicator.BackgroundTransparency = 1.000
-imageindicator.Position = UDim2.new(0.5, 0, 0.175, 0)
-imageindicator.Size = UDim2.new(0.15, 0, 0.15, 0)
-
-sizeconst1.AspectRatio = 1
-sizeconst1.Parent = setdecal
-
-sizeconst2.AspectRatio = 1
-sizeconst2.Parent = rotatebutton
-
-sizeconst3.AspectRatio = 1
-sizeconst3.Parent = imageindicator
+_decPanel = createToolPanel({name = "DecalToolGui", title = "Decal Tool", size = UDim2.new(0, 210, 0, 185)})
+_decPanel.gui.Enabled = false
+decalInput = createToolInput(_decPanel.frame, 0.18, "Enter Decal ID")
+createToolButton(_decPanel.frame, "Rotate 90 Degrees", 0.36, 0.06, 0.88, function()
+    decalrotation = decalrotation + 90
+end)
+_decPreview = Library:CreateToolImagePreview(_decPanel.frame, 0.52)
 
 local fakememe = Instance.new("Part")
 fakememe.CanCollide = false
@@ -7032,42 +6716,23 @@ imageindicator2.Position = UDim2.new(0,0,0,0)
 imageindicator2.Size = UDim2.new(1,0,1,0)
 
 function updatememeifydisplays()
-    imageindicator.Image = "https://www.roblox.com/Thumbs/Asset.ashx?width=420&height=420&assetId="..memeifyid
-    imageindicator2.Image = "https://www.roblox.com/Thumbs/Asset.ashx?width=420&height=420&assetId="..memeifyid
+    _decPreview:SetImage(memeifyid)
+    imageindicator2.Image = "https://www.roblox.com/Thumbs/Asset.ashx?width=420&height=420&assetId=" .. memeifyid
 end
 
-if setdecal and scriptConnections then
-    table.insert(scriptConnections, setdecal:GetPropertyChangedSignal("Text"):Connect(function()
-        memeifyid = isolatenumbers(setdecal.Text)
-        updatememeifydisplays()
-    end))
-else
-    setdecal:GetPropertyChangedSignal("Text"):Connect(function()
-        memeifyid = isolatenumbers(setdecal.Text)
-        updatememeifydisplays()
-    end)
-end
+decalrotation = 0
 
+table.insert(scriptConnections, decalInput:GetPropertyChangedSignal("Text"):Connect(function()
+    memeifyid = isolatenumbers(decalInput.Text)
+    updatememeifydisplays()
+end))
 
 updatememeifydisplays()
-
-local decalrotation = 0
-if rotatebutton and scriptConnections then
-    table.insert(scriptConnections, rotatebutton.MouseButton1Click:Connect(function()
-        decalrotation = decalrotation + 90
-    end))
-else
-    rotatebutton.MouseButton1Click:Connect(function()
-        decalrotation = decalrotation + 90
-    end)
-end
 
 function getfixedthing(s)
     local tb = s == Enum.NormalId.Top or s == Enum.NormalId.Bottom
     local v = Vector3.new(0,tb and -1 or -0.25,tb and -0.76 or -0.01)
-    --[[if decalrotation % 180 == 90 then
-        v = Vector3.new(v.X,v.Z,v.Y)
-    end]]
+    
     return v
 end
 
@@ -7125,22 +6790,18 @@ function eb()
 end
 
 function createdecaltool()
-    --[[local sound = Instance.new("Sound")
-    sound.SoundId = "rbxassetid://6897623656"
-    sound.Parent = game.Workspace
-    sound:Play()
-    game.Debris:AddItem(sound, 5)]]
+    
     local connections = {}
     currentdectool = dectool:Clone()
     local equipped = false
-    table.insert(connections,currentdectool.Equipped:Connect(function()
+    table.insert(connections, currentdectool.Equipped:Connect(function()
         equipped = true
-        sui.Enabled = true
+        _decPanel.gui.Enabled = true
         suui.Enabled = true
     end))
-    table.insert(connections,currentdectool.Unequipped:connect(function()
+    table.insert(connections, currentdectool.Unequipped:Connect(function()
         equipped = false
-        sui.Enabled = false
+        _decPanel.gui.Enabled = false
         suui.Enabled = false
     end))
     
@@ -7169,16 +6830,15 @@ function createdecaltool()
                 waitmemeify()
             end
             local memeifyblock = getmemeify(true)
-            local idkwhattonamets2 = idkwhattonamets[selectside]
-            local firstone,secondone = idkwhattonamets2[1],idkwhattonamets2[2]
+            local dsizes2 = dsizes[selectside]
+            local firstone,secondone = dsizes2[1],dsizes2[2]
             if decalrotation%180 == 90 then
-                firstone,secondone = idkwhattonamets2[2],idkwhattonamets2[1]
+                firstone,secondone = dsizes2[2],dsizes2[1]
             end
-            local screwroblox = decalrotations[selectside]
-            local screwroblox2 = decalrotations2[selectside]
+            local screwroblox = drot[selectside]
+            local screwroblox2 = drot2[selectside]
             local lat = (CFrame.Angles(screwroblox[1]+screwroblox2[1]*decalrotation,screwroblox[2]+screwroblox2[2]*decalrotation,screwroblox[3]+screwroblox2[3]*decalrotation))
-            local surfacecfr = CFrame.new(CFrame.new(selection.Position + Vector3.new(0,-1,0) + (Vector3.FromNormalId(selectside)*selection.Size/2)) * lat * getfixedthing(selectside)) * lat -- dont know why I had to put this at the end... but its needed
-
+            local surfacecfr = CFrame.new(CFrame.new(selection.Position + Vector3.new(0,-1,0) + (Vector3.FromNormalId(selectside)*selection.Size/2)) * lat * getfixedthing(selectside)) * lat
 
             local looping = true
             pcall(function()
@@ -7187,7 +6847,7 @@ function createdecaltool()
                     task.wait(3)
                 end
                 gcp("hum").PlatformStand = true
-                --local d = hover(gcp("hrp"),surfacecfr)
+
                 coroutine.wrap(function()
                     while looping do
                         gcp("hrp").CFrame = surfacecfr
@@ -7218,14 +6878,14 @@ function createdecaltool()
         if equipped and mouse.Target and IsSelectable(mouse.Target,mouse.Hit.Position) and mouse.TargetSurface then
             local selectside = mouse.TargetSurface
             local selection = mouse.Target
-            local idkwhattonamets2 = idkwhattonamets[selectside]
-            local firstone,secondone = idkwhattonamets2[1],idkwhattonamets2[2]
+            local dsizes2 = dsizes[selectside]
+            local firstone,secondone = dsizes2[1],dsizes2[2]
             if decalrotation%180 == 90 then
-                firstone,secondone = idkwhattonamets2[2],idkwhattonamets2[1]
+                firstone,secondone = dsizes2[2],dsizes2[1]
             end
             fakememe.Size = Vector3.new(selection.Size[firstone],selection.Size[secondone],0.001)
-            local screwroblox = decalrotations[selectside]
-            local screwroblox2 = decalrotations2[selectside]
+            local screwroblox = drot[selectside]
+            local screwroblox2 = drot2[selectside]
             local lat = (CFrame.Angles(screwroblox[1]+screwroblox2[1]*decalrotation,screwroblox[2]+screwroblox2[2]*decalrotation,screwroblox[3]+screwroblox2[3]*decalrotation))
             local tb = selectside == Enum.NormalId.Top or selectside == Enum.NormalId.Bottom
             local surfacecfr = CFrame.new(CFrame.new(selection.Position + (Vector3.FromNormalId(selectside)*selection.Size/2)) * lat * getfixedthing(selectside)) * lat
@@ -7254,9 +6914,6 @@ function createdecaltool()
     return currentdectool
 end
 
--- ================================================================
---  EDITOR TOOL — click a block to edit color, material, anchor, etc.
--- ================================================================
 local _edPanel = createToolPanel({
     name = "EditorToolGui",
     title = "Block Editor",
@@ -7271,7 +6928,6 @@ local edColorBox = createToolInput(_edPanel.frame, 0.13, "R,G,B (e.g. 255,0,0)")
 local edMatBox   = createToolInput(_edPanel.frame, 0.24, "Material (e.g. Neon)")
 local _editorSel = nil
 
--- Helper to get paint tool + script
 local function edPaint()
     local pt = localplr.Character and (localplr.Character:FindFirstChild("Paint") or localplr.Backpack:FindFirstChild("Paint"))
     if not pt then return nil, nil end
@@ -7415,7 +7071,6 @@ function createeditortool()
     return edTool
 end
 
--- Auto R6 Revival
 local AutoR6Group = Tabs.Chat:AddLeftGroupbox('Auto R6 Revival')
 AutoR6Group:AddLabel('Equips Enlighten & /r6s you on death')
 AutoR6Group:AddLabel('Requires Enlighten in backpack')
@@ -7475,9 +7130,6 @@ AdvancedGroup:AddButton({
     end
 })
 
--- ================================================================
---  CARPET MODE TOOL — click a block to place a flat carpet on top
--- ================================================================
 function createcarpettool()
     local connections = {}
     local cTool = Instance.new("Tool")
@@ -7518,11 +7170,9 @@ function createcarpettool()
         local target = mouse.Target
         cSBox.Adornee = target
 
-        -- Place a flat brick on top of the selected block (carpet)
         local topPos = target.Position + Vector3.new(0, target.Size.Y / 2 + 0.1, 0)
         local carpetPos = snap(topPos)
 
-        -- Build a block at the carpet position
         local et = equiptool("Build")
         if et then
             et.Script.Event:FireServer(
@@ -7533,7 +7183,6 @@ function createcarpettool()
             )
             task.wait(buildDelay)
 
-            -- Find the new block and paint it brown/fabric
             local myFolder = workspace.Bricks:FindFirstChild(localplr.Name)
             if myFolder then
                 local newest = nil
@@ -7572,9 +7221,6 @@ function createcarpettool()
     return cTool
 end
 
--- ================================================================
---  R6 MODE TOOL — click a block to give it R6 (spawn R6 on block)
--- ================================================================
 function creater6tool()
     local connections = {}
     local r6Tool = Instance.new("Tool")
@@ -7616,16 +7262,13 @@ function creater6tool()
         local target = mouse.Target
         r6SBox.Adornee = target
 
-        -- Teleport to block, equip Enlighten, send ;r6
         local hrp = localplr.Character and localplr.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        -- Move on top of the block
         local topPos = target.Position + Vector3.new(0, target.Size.Y / 2 + 3, 0)
         hrp.CFrame = CFrame.new(topPos)
         task.wait(0.15)
 
-        -- Equip Enlighten
         local arken = localplr.Backpack:FindFirstChild("The Arkenstone")
             or (localplr.Character and localplr.Character:FindFirstChild("The Arkenstone"))
         if arken and arken.Parent == localplr.Backpack then
@@ -7633,7 +7276,6 @@ function creater6tool()
             task.wait(0.05)
         end
 
-        -- Send ;r6
         pcall(function()
             game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";r6 " .. localplr.Name)
         end)
@@ -7672,7 +7314,6 @@ AdvancedGroup:AddButton({
     end
 })
 
--- Stash System Variables
 stopStash = false
 stashRunning = false
 stashPosition = getgenv().stashposition or Vector3.new(
@@ -7682,7 +7323,6 @@ stashPosition = getgenv().stashposition or Vector3.new(
 )
 getgenv().stashposition = stashPosition
 
--- Invisible stash platform
 local stashPlatform = getgenv().invisstashplatform or Instance.new("Part")
 stashPlatform.CFrame = CFrame.new(stashPosition - Vector3.new(0, 10, 0))
 stashPlatform.Anchored = true
@@ -7693,9 +7333,8 @@ stashPlatform.Size = Vector3.new(200, 1, 200)
 stashPlatform.Parent = workspace
 getgenv().invisstashplatform = stashPlatform
 
--- Helper: check enlighten is still equipped and player is muted
  function checkStash()
-    -- Check enlighten
+
     local hasEnlighten = plr.Character:FindFirstChild("The Arkenstone") 
         or plr.Backpack:FindFirstChild("The Arkenstone")
     
@@ -7704,7 +7343,7 @@ getgenv().invisstashplatform = stashPlatform
         return false
     end
     
-    -- Ensure muted
+
     if not plr:HasTag("Muted") then
         task.wait(0.5)
         game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";mute me")
@@ -7714,7 +7353,6 @@ getgenv().invisstashplatform = stashPlatform
     return true
 end
 
--- Helper: equip The Arkenstone
  function equipEnlighten(unequipOthers)
     if unequipOthers then
         for _, tool in pairs(plr.Character:GetChildren()) do
@@ -7733,7 +7371,6 @@ end
     return false
 end
 
--- Helper: equip BlueBucket
  function equipBlueBucket()
     if plr.Character:FindFirstChild("BlueBucket") then
         return true
@@ -7768,13 +7405,11 @@ function ClearPlatform()
     end
 end
 
--- Helper: has enlighten check
  function hasEnlighten()
     return plr.Character:FindFirstChild("The Arkenstone") ~= nil
         or plr.Backpack:FindFirstChild("The Arkenstone") ~= nil
 end
 
--- Main stash function
  function runStash(stashAmount)
     if stashRunning then
         Library:Notify("Stash already running!", 3)
@@ -7802,18 +7437,18 @@ end
             return 
         end
         
-        -- Save original position to return to
+
         local originalCFrame = hrp.CFrame
         
-        -- Teleport to stash area
+
         character:PivotTo(CFrame.new(stashPosition + Vector3.new(0, 30, 0)))
         task.wait(0.5)
         
-        -- Enable platform so we don't fall
+
         stashPlatform.CanCollide = true
         stashPlatform.Transparency = 0.9
         
-        -- Mute ourselves before starting
+
         if not plr:HasTag("Muted") then
             task.wait(0.5)
             game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";mute me")
@@ -7825,7 +7460,7 @@ end
         for i = 1, stashAmount do
             if stopStash then break end
             
-            -- Calculate grid position for this clone
+
              existingClones = 0
              cloneFolder = workspace:FindFirstChild("Clones")
             if cloneFolder and cloneFolder:FindFirstChild(plr.Name) then
@@ -7837,7 +7472,7 @@ end
              offsetX = col * 10
              offsetZ = row * 10
             
-            -- Position for this clone
+
             local clonePos = stashPosition + Vector3.new(offsetX, 0, offsetZ)
             character:PivotTo(CFrame.new(clonePos))
             task.wait(1)
@@ -7845,11 +7480,11 @@ end
             if stopStash then break end
             if not checkStash() then break end
             
-            -- Equip enlighten (unequip others)
+
             equipEnlighten(false)
             task.wait(0.3)
             
-            -- Get BlueBucket if we don't have it
+
             if not equipBlueBucket() then
                 game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";gear me 25162389")
                 task.wait(1.5)
@@ -7860,29 +7495,29 @@ end
             if stopStash then break end
             if not checkStash() then break end
             
-            -- Freeze
+
             game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";freeze me")
             task.wait(1)
             
             if stopStash then break end
             if not checkStash() then break end
             
-            -- Clone
+
             game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";clone me")
             task.wait(1)
             
             if stopStash then break end
             if not checkStash() then break end
             
-            -- Unfreeze
+
             game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";unfreeze me")
             
-            -- Move up slightly so clone stays below
+
             character:PivotTo(CFrame.new(clonePos + Vector3.new(0, 15, 0)))
             
             Library:Notify("Clone " .. i .. "/" .. stashAmount .. " created", 3)
             
-            -- Wait between clones, checking each second
+
             for _ = 1, 10 do
                 task.wait(1)
                 if stopStash then break end
@@ -7890,22 +7525,22 @@ end
             end
         end
         
-        -- Cleanup
+
         task.wait(1)
         game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";unmute me")
         task.wait(0.5)
         
-        -- Unequip tools
+
          hum = character:FindFirstChildOfClass("Humanoid")
         if hum then
             hum:UnequipTools()
         end
         
-        -- Return to original position
+
         task.wait(0.5)
         hrp.CFrame = originalCFrame
         
-        -- Disable platform
+
         stashPlatform.CanCollide = false
         stashPlatform.Transparency = 1
         
@@ -7922,7 +7557,6 @@ end
     end)
 end
 
--- UI
  StashGroup = Tabs.StashSystem:AddLeftGroupbox('Stash Management')
 
  StashAmount = StashGroup:AddSlider('StashAmount', {
@@ -7964,7 +7598,6 @@ StashGroup:AddButton({
 StashGroup:AddLabel('Requires: Enlighten')
 StashGroup:AddLabel('Stash coords are randomised per session')
 
--- Platform Group
  StashPlatform = Tabs.StashSystem:AddLeftGroupbox('Platform')
 
 StashPlatform:AddButton({
@@ -7995,13 +7628,9 @@ StashPlatform:AddButton({
     end
 })
 
--- Settings Group
+ PlayerToolsGroup = Tabs.StashSystem:AddLeftGroupbox('Player Management')
 
-
--- Player & Settings Tab
-local PlayerToolsGroup = Tabs.StashSystem:AddLeftGroupbox('Player Management')
-
-PlayerToolsGroup:AddInput('SpecificPlayer', {
+ SpecificPlayerInput = PlayerToolsGroup:AddInput('SpecificPlayer', {
     Default = '',
     Numeric = false,
     Text = 'Specific Player:',
@@ -8009,18 +7638,25 @@ PlayerToolsGroup:AddInput('SpecificPlayer', {
     Tooltip = 'Target specific player by name (overrides dropdown)'
 })
 
+ PlayerTargetDropdown = PlayerToolsGroup:AddDropdown('PlayerTarget', {
+    Values = {'all', 'others', 'me', 'random'},
+    Default = 1,
+    Text = 'Target Mode:',
+    Tooltip = 'Used when Specific Player is empty'
+})
+
 PlayerToolsGroup:AddButton({
     Text = 'Execute Fling',
     Func = function()
-        local Players = game:GetService("Players")
-        local localPlayer = Players.LocalPlayer
-        local specificName = Options.SpecificPlayer.Value
-        local targetMode = Options.PlayerTarget.Value
+         Players = game:GetService("Players")
+         localPlayer = Players.LocalPlayer
+         specificName = SpecificPlayerInput and SpecificPlayerInput.Value or ""
+         targetMode = PlayerTargetDropdown and PlayerTargetDropdown.Value or "all"
 
-        local function flingPlayer(target)
+         function flingPlayer(target)
             if not target or not target.Character then return end
-            local hrp = target.Character:FindFirstChild("HumanoidRootPart")
-            local myHrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+             hrp = target.Character:FindFirstChild("HumanoidRootPart")
+             myHrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
             if not hrp or not myHrp then return end
 
             local bv = Instance.new("BodyVelocity")
@@ -8032,13 +7668,12 @@ PlayerToolsGroup:AddButton({
             Library:Notify("Flung: " .. target.Name, 3)
         end
 
-        -- Specific player input overrides dropdown
         if specificName ~= '' then
-            local found = Players:FindFirstChild(specificName)
+             found = Players:FindFirstChild(specificName)
             if found then
                 flingPlayer(found)
             else
-                -- Partial name match
+
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p.Name:lower():find(specificName:lower()) then
                         flingPlayer(p)
@@ -8102,8 +7737,6 @@ PlayerToolsGroup:AddButton({
         end
     end
 })
-
-
 
 CharacterGroup = Tabs.StashSystem:AddRightGroupbox('Character Control')
 
@@ -8250,20 +7883,17 @@ StashSettingsGroup:AddButton({
     end
 })
 
--- Chat Tab
  ChatGroup = Tabs.Chat:AddLeftGroupbox('Chat Utility')
 
  ChatSpyEnabled = false
  chatSpyConnection = nil
 
--- Store the toggle in a variable
 local ChatSpyToggle = ChatGroup:AddToggle('ChatSpy', {
     Text = 'Enable Chat Spy',
     Default = false,
     Tooltip = 'See all chat messages including private ones'
 })
 
--- Enhanced Chat Spy System (TCO Style)
 local ChatModsEnabled = false
 local namecolors = {
     peasant = {150, 103, 102},
@@ -8285,7 +7915,6 @@ local joincmds = {
     joinog = "JoinOG"
 }
 
--- Enhanced chat modification function
 local originalOnIncomingMessage
  function setupEnhancedChatSpy()
     if game.TextChatService.OnIncomingMessage then
@@ -8293,7 +7922,7 @@ local originalOnIncomingMessage
     end
     
     game.TextChatService.OnIncomingMessage = function(mdata)
-        -- Call original function first if it exists
+
         if originalOnIncomingMessage then
             mdata = originalOnIncomingMessage(mdata) or mdata
         end
@@ -8305,7 +7934,7 @@ local originalOnIncomingMessage
              cn = ""
              hidden = false
             
-            -- Determine user role and color
+
             if plr.Neutral == true then
                 if plr:GetAttribute("Arken") == true then
                     cn = "arken"
@@ -8324,7 +7953,7 @@ local originalOnIncomingMessage
                 end
             end
             
-            -- Handle command hiding
+
              cmd = string.sub(mdata.Text, 1, string.find(mdata.Text, " ") or #mdata.Text + 1)
             if string.sub(mdata.Text, 1, 1) == ";" then
                 cmd = string.sub(mdata.Text, 2, string.find(mdata.Text, " ") or #mdata.Text + 1)
@@ -8336,7 +7965,7 @@ local originalOnIncomingMessage
                 end
             end
             
-            -- Handle join commandsUI
+
             if plr == game.Players.LocalPlayer and joincmds[cmd:lower()] then
                 for i, v in pairs(joincmds) do
                     if game.Players.LocalPlayer.PlayerGui:FindFirstChild(v) then
@@ -8345,7 +7974,7 @@ local originalOnIncomingMessage
                 end
             end
             
-            -- IQ indicator
+
             local iq = nil
             if ChatSpyEnabled and plr:GetAttribute("IQ") then
                 if plr:GetAttribute("IQ") >= 200 then
@@ -8357,20 +7986,19 @@ local originalOnIncomingMessage
                 end
             end
             
-            -- Apply colored prefix
+
             mdata.PrefixText = "<font color=\""..namecolorshex[cn].."\"><b><font color='rgb("..
                 tostring(namecolors[cn][1])..","..tostring(namecolors[cn][2])..","..tostring(namecolors[cn][3])..
                 ")'>["..plr.DisplayName..((hidden and " (HIDDEN CHAT)") or "")..
                 ((iq and (" ("..iq..")")) or "")..((muted and (" (MUTED)")) or "").."]: </font></b></font>"
             
-            -- Log to console for spy functionality
+
         end
         
         return mdata
     end
 end
 
--- Add toggle for enhanced chat mods
  ChatModsToggle = ChatGroup:AddToggle('ChatMods', {
     Text = 'Enhanced Chat Colors',
     Default = false,
@@ -8384,7 +8012,7 @@ ChatModsToggle:OnChanged(function(value)
         setupEnhancedChatSpy()
         Library:Notify("Enhanced chat colors enabled", 3)
     else
-        -- Restore original function
+
         if originalOnIncomingMessage then
             game.TextChatService.OnIncomingMessage = originalOnIncomingMessage
         else
@@ -8393,14 +8021,13 @@ ChatModsToggle:OnChanged(function(value)
     end
 end)
 
--- Enhanced player highlighting system (like TCO)
 dheads = {}
 groups = {}
 
  function plradded(plr)
-    local owner = false -- Add your owner IDs here if needed
+    local owner = false
     
-    -- Check for special groups
+
     local groupInfo = nil
     for groupId, info in pairs(groups) do
         if plr:IsInGroup(groupId) then
@@ -8456,14 +8083,12 @@ groups = {}
     end
 end
 
--- Connect to existing players
 for _, player in ipairs(game.Players:GetPlayers()) do
     plradded(player)
 end
 
 game.Players.PlayerAdded:Connect(plradded)
 
--- Cleanup function
  function cleanupEnhancedChat()
     for head, gui in pairs(dheads) do
         if gui then
@@ -8477,7 +8102,6 @@ game.Players.PlayerAdded:Connect(plradded)
     end
 end
 
--- Add cleanup to your existing cleanup function
 local originalCleanup = Library.OnUnload
 Library.OnUnload = function()
     cleanupEnhancedChat()
@@ -8486,7 +8110,6 @@ Library.OnUnload = function()
     end
 end
 
--- Fake Time Spoofer
 local FakeTimeGroup = Tabs.Chat:AddLeftGroupbox('Time Spoofer')
 FakeTimeGroup:AddLabel('Client-side only')
 
@@ -8517,7 +8140,7 @@ FakeTimeToggle:OnChanged(function()
         end)
         Library:Notify("Fake Time active: " .. FakeTimeValue.Value, 3)
     else
-        -- Restore — nothing to do, server will correct on next tick
+
         Library:Notify("Fake Time disabled", 2)
     end
 end)
@@ -8626,8 +8249,6 @@ ChatGroup:AddButton({
     end
 })
 
-
-
 CustomSpamMessage = ChatGroup:AddInput('CustomSpamMessage', {
     Default = 'RomazDev Hub ON TOP!',
     Numeric = false,
@@ -8659,7 +8280,6 @@ ChatGroup:AddButton({
     end
 })
 
--- Chat spy functionality
 function startChatSpy()
     if chatSpyConnection then
         chatSpyConnection:Disconnect()
@@ -8670,15 +8290,14 @@ function startChatSpy()
             sender = message.TextSource
             text = message.Text
             
-            -- Log the message (you could send to a webhook or just print)
+
             
-            -- Optional: Send to a notification
+
             Library:Notify("Chat Spy: " .. text, 5)
         end
     end)
 end
 
--- Use the stored toggle variable
 ChatSpyToggle:OnChanged(function(value)
     ChatSpyEnabled = value
     
@@ -8693,8 +8312,6 @@ ChatSpyToggle:OnChanged(function(value)
     end
 end)
 
-
--- Anti Tab
 AntisGroup = Tabs.Auras:AddLeftGroupbox('Antis')
 
 AntiVoid = AntisGroup:AddToggle('AntiVoid', {
@@ -8720,8 +8337,6 @@ AntiBlind = AntisGroup:AddToggle('AntiBlind', {
     Default = false,
     Tooltip = 'Prevents jail effects'
 })
-
--- Add these toggles to your existing AntisGroup in the AntisTab
 
  AntiVampire = AntisGroup:AddToggle('AntiVampire', {
     Text = 'Anti Vampire',
@@ -8765,7 +8380,6 @@ AntiBlind = AntisGroup:AddToggle('AntiBlind', {
     Tooltip = 'Prevents teleportation to far lands'
 })
 
-
  AntiFreeze = AntisGroup:AddToggle('AntiFreeze', {
     Text = 'Anti Freeze',
     Default = false,
@@ -8789,7 +8403,7 @@ AntiBlind = AntisGroup:AddToggle('AntiBlind', {
     Default = false,
     Tooltip = 'Prevents cursed effects'
 })
--- Connect all toggle events properly
+
 GriefAura:OnChanged(function()
     auraSettings.griefAura.active = GriefAura.Value
     auraSettings.griefAura.range = AuraRange.Value
@@ -8805,8 +8419,6 @@ GriefAura:OnChanged(function()
         end
     end
 end)
-
--- Update color when picker changes
 
 BlockAura:OnChanged(function()
     auraSettings.blockAura.active = BlockAura.Value
@@ -8824,7 +8436,6 @@ BlockAura:OnChanged(function()
     end
 end)
 
--- Anti Toggles
 AntiBlind:OnChanged(function()
     if AntiBlind.Value then
         StartAntiBlind()
@@ -8836,8 +8447,6 @@ AntiBlind:OnChanged(function()
         end
     end
 end)
-
--- Add these connection handlers after your existing anti toggle connections
 
 AntiVampire:OnChanged(function()
     if AntiVampire.Value then
@@ -8923,7 +8532,6 @@ AntiFarlands:OnChanged(function()
     end
 end)
 
-
 AntiDrag:OnChanged(function()
     if AntiDrag.Value then
         StartAntiDrag()
@@ -8976,7 +8584,7 @@ MuteBoomboxesToggle:OnChanged(function(value)
     muteBoomboxesEnabled = value
 
     if value then
-        -- Mute existing boomboxes
+
         for _, tool in pairs(workspace:GetDescendants()) do
             if tool:IsA("Tool") and boomboxNames[tool.Name] then
                 local sound = tool:FindFirstChild("Sound", true)
@@ -8986,7 +8594,6 @@ MuteBoomboxesToggle:OnChanged(function(value)
             end
         end
 
-        -- Listen for new boomboxes (disconnect old first)
         if _muteBoomboxConn then _muteBoomboxConn:Disconnect() end
         _muteBoomboxConn = workspace.DescendantAdded:Connect(function(descendant)
             if descendant:IsA("Tool") and boomboxNames[descendant.Name] and muteBoomboxesEnabled then
@@ -8999,12 +8606,12 @@ MuteBoomboxesToggle:OnChanged(function(value)
 
         Library:Notify("All boomboxes muted", 3)
     else
-        -- Disconnect listener
+
         if _muteBoomboxConn then
             _muteBoomboxConn:Disconnect()
             _muteBoomboxConn = nil
         end
-        -- Unmute boomboxes
+
         for _, tool in pairs(workspace:GetDescendants()) do
             if tool:IsA("Tool") and boomboxNames[tool.Name] then
                 local sound = tool:FindFirstChild("Sound", true)
@@ -9027,7 +8634,6 @@ AntiFog:OnChanged(function()
         end
     end
 end)
-
 
 AntiCursed:OnChanged(function()
     if AntiCursed.Value then
@@ -9153,7 +8759,6 @@ AuraSpeed:OnChanged(function()
     end
 end)
 
-
 AutoPickup:OnChanged(function()
     autoPickupEnabled = AutoPickup.Value
 end)
@@ -9162,9 +8767,8 @@ AutoDrop:OnChanged(function()
     autoDropEnabled = AutoDrop.Value
 end)
 
--- Clear any anti-void visual parts
 function clearPartRing()
-    -- No-op: anti-void does not create visual ring parts in this version
+
 end
 
 AntiVoid:OnChanged(function()
@@ -9179,7 +8783,6 @@ AntiVoid:OnChanged(function()
     end
 end)
 
--- ThemeManager and SaveManager setup
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
@@ -9190,8 +8793,6 @@ SaveManager:SetFolder('RomazDevHub')
 ThemeManager:ApplyToTab(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
-
--- Add this to your existing cleanup function
  function cleanupBoombox()
     if bbsbox then
         bbsbox:Destroy()
@@ -9204,14 +8805,58 @@ SaveManager:BuildConfigSection(Tabs.Settings)
     end
 end
 
--- Menu settings
 Library:OnUnload(function()
     _G.ROMAZDEV_HUB_LOADED = false
     Library.Unloaded = true
 
     pcall(sendRelayLeave)
+    _relayHeartbeatRunning = false
 
-     cleanupBoombox()
+    if chatSpyConnection then
+        chatSpyConnection:Disconnect()
+        chatSpyConnection = nil
+    end
+
+    if _muteBoomboxConn then
+        _muteBoomboxConn:Disconnect()
+        _muteBoomboxConn = nil
+    end
+
+    for _, conn in pairs(hubRespawnConns) do
+        pcall(function() conn:Disconnect() end)
+    end
+    hubRespawnConns = {}
+
+    if autoScanThread then
+        pcall(function() task.cancel(autoScanThread) end)
+        autoScanThread = nil
+    end
+
+    stopStash = true
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        pcall(function()
+            if player.Character then
+                local head = player.Character:FindFirstChild("Head")
+                if head then
+                    for _, child in ipairs(head:GetChildren()) do
+                        if child:IsA("BillboardGui") then
+                            child:Destroy()
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    pcall(function()
+        if stashPlatform and stashPlatform.Parent then
+            stashPlatform.CanCollide = false
+            stashPlatform.Transparency = 1
+        end
+    end)
+
+    cleanupBoombox()
 
 if _toolsESPAddConn then _toolsESPAddConn:Disconnect() end
 if _toolsESPRemoveConn then _toolsESPRemoveConn:Disconnect() end
@@ -9229,7 +8874,6 @@ for _, data in pairs(toolsESPLabels) do pcall(function() data.bb:Destroy() end) 
             connection:Disconnect()
         end
     end
-
 
     workspace.FallenPartsDestroyHeight = originalDestroyHeight
 
@@ -9318,7 +8962,7 @@ MenuSize:OnChanged(function()
         if _mainFrame and _mainFrame.Parent then
             _mainFrame.Size = muludim2(divudim2(windowsize, 10), MenuSize.Value)
         else
-            -- Retry capture in case defer hadn't fired yet
+
             for _, sg in ipairs(game:GetService("CoreGui"):GetChildren()) do
                 if sg:IsA("ScreenGui") then
                     local f = sg:FindFirstChildWhichIsA("Frame")
@@ -9337,8 +8981,6 @@ if MenuKeybind then
     Library.ToggleKeybind = MenuKeybind
 end
 Library:SetWatermarkVisibility(true)
-
-
 
  FrameTimer = tick()
  FrameCounter = 0
@@ -9364,10 +9006,8 @@ Library:GiveSignal(RunService.RenderStepped:Connect(function()
     ))
 end))
 
--- Load configuration
 SaveManager:LoadAutoloadConfig()
 
--- Auto-rejoin functionality
 function SetupAutoRejoin()
     if AutoRejoin.Value then
         plr.OnTeleport:Connect(function(state)
@@ -9378,7 +9018,6 @@ function SetupAutoRejoin()
     end
 end
 
--- Enhanced initial setup with whitelist celebration
 task.spawn(function()
     task.wait(2)
     SetupAutoRejoin()
