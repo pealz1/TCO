@@ -6,3 +6,7 @@
 /*.rbxl.lock
 
 sourcemap.json
+
+# Place files saved from Studio for syncback
+/*.rbxl
+/*.rbxlx
